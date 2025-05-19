@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta  # ✅ Ensure this is included
 import pytz
 import hashlib
 import matplotlib.pyplot as plt
@@ -167,7 +167,7 @@ else:
     if "expiration_date" in df.columns:
         df['expiration_date'] = pd.to_datetime(df['expiration_date'], errors='coerce')
         expired = df[df['expiration_date'] < datetime.now()]
-        expiring_soon = df[(df['expiration_date'] >= datetime.now()) & 
+        expiring_soon = df[(df['expiration_date'] >= datetime.now()) &
                            (df['expiration_date'] <= datetime.now() + timedelta(days=7))]
 
         if not expired.empty:
@@ -227,7 +227,7 @@ else:
     ```
     """)
 
-    query_input = st.text_area("Write SQL Query", 
+    query_input = st.text_area("Write SQL Query",
         value=f"SELECT product_name, SUM(total_stock) as total FROM inventory WHERE username = '{st.session_state.username}' GROUP BY product_name")
 
     if st.button("🚀 Run SQL Query"):
