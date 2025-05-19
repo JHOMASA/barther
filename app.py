@@ -121,11 +121,11 @@ else:
         unit_price = st.number_input("Unit Price", min_value=0.0, format="%.2f")
         quantity = st.number_input("Quantity", min_value=1, value=1)
 
-       requires_expiration = st.radio("Does this product require an expiration date?", ("Yes", "No"))
-       expiration_date = None
-       if requires_expiration == "Yes":
+        requires_expiration = st.radio("Does this product require an expiration date?", ("Yes", "No"))
+        expiration_date = None
+        if requires_expiration == "Yes":
           expiration_date = st.date_input("Expiration Date")
-       else:
+        else:
           st.info("🛈 No expiration date registered.")
 
         submitted = st.form_submit_button("✅ Record Entry")
