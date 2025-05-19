@@ -94,6 +94,7 @@ if not st.session_state.logged_in:
                 st.session_state.logged_in = True
                 st.session_state.username = username
                 st.success(f"✅ Welcome, {username}!")
+                st.experimental_rerun()
             else:
                 st.error("❌ Invalid credentials")
 
@@ -107,8 +108,10 @@ if not st.session_state.logged_in:
 else:
     st.sidebar.success(f"Logged in as {st.session_state.username}")
 
+    # ---------- LOAD INVENTORY ----------
+    df = load_inventory(st.session_state.username)
+
     # ---------- STOCK FORM ----------
-   # 🔁 Add to your form inside the `if st.session_state.logged_in:` block
     with st.form("add_stock_form"):
         st.subheader("➕ Add Inventory Movement")
         product_name = st.text_input("Product Name")
@@ -130,10 +133,9 @@ else:
             now = datetime.now(lima_tz)
             total_units = stock_in - stock_out
             total_price = unit_price * quantity
-            previous = load_inventory(st.session_state.username)
             prev_stock = (
-                previous[previous["product_name"] == product_name]["total_stock"].iloc[-1]
-                if product_name in previous["product_name"].values else 0
+                df[df["product_name"] == product_name]["total_stock"].iloc[-1]
+                if product_name in df["product_name"].values else 0
             )
             new_stock = prev_stock + total_units
 
@@ -155,11 +157,13 @@ else:
 
             insert_inventory(data)
             st.success(f"📦 Entry for **{product_name}** saved.")
+            st.experimental_rerun()
 
-# 🔔 Show expiration warnings after displaying df
+    # ---------- DISPLAY INVENTORY ----------
     st.subheader("📊 Inventory Log")
     st.dataframe(df, use_container_width=True)
 
+    # ---------- EXPIRATION ALERTS ----------
     if "expiration_date" in df.columns:
         df['expiration_date'] = pd.to_datetime(df['expiration_date'], errors='coerce')
         expired = df[df['expiration_date'] < datetime.now()]
@@ -174,7 +178,7 @@ else:
             st.info("🔔 Products **expiring soon** (within 7 days):")
             st.dataframe(expiring_soon[["product_name", "batch_id", "expiration_date"]])
 
-# 🗑️ Add this section below the log and graph
+    # ---------- DELETE ROW ----------
     st.subheader("🗑️ Delete Specific Inventory Row")
     if not df.empty:
         row_to_delete = st.selectbox("Select Row ID to Delete", df['id'].astype(str))
@@ -184,10 +188,7 @@ else:
             conn.commit()
             conn.close()
             st.success(f"✅ Row with ID {row_to_delete} deleted.")
-    # ---------- LOAD & SHOW DATA ----------
-    df = load_inventory(st.session_state.username)
-    st.subheader("📊 Inventory Log")
-    st.dataframe(df, use_container_width=True)
+            st.experimental_rerun()
 
     # ---------- DOWNLOAD ----------
     st.download_button("⬇ Download CSV", df.to_csv(index=False).encode(), "inventory.csv", "text/csv")
@@ -216,7 +217,7 @@ else:
     # ---------- SQL QUERY ----------
     st.subheader("🧠 Custom SQL Query Engine")
     st.markdown("""
-    Use SQL to run custom queries on your inventory.  
+    Use SQL to run custom queries on your inventory.
     Example:
     ```sql
     SELECT product_name, SUM(stock_in) AS total_in
@@ -231,7 +232,7 @@ else:
 
     if st.button("🚀 Run SQL Query"):
         try:
-            user_query = query_input.replace(";", "")  # basic safety
+            user_query = query_input.replace(";", "")
             df_query = pd.read_sql_query(user_query, conn)
             st.success("✅ Query executed successfully")
             st.dataframe(df_query, use_container_width=True)
