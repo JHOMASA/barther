@@ -121,12 +121,12 @@ else:
         unit_price = st.number_input("Unit Price", min_value=0.0, format="%.2f")
         quantity = st.number_input("Quantity", min_value=1, value=1)
 
-        requires_expiration = st.radio("Does this product require an expiration date?", ("Yes", "No"))
-        expiration_date = None
-        if requires_expiration == "Yes":
-            expiration_date = st.date_input("Expiration Date")
-        else:
-            st.info("🛈 No expiration date registered.")
+       requires_expiration = st.radio("Does this product require an expiration date?", ("Yes", "No"))
+       expiration_date = None
+       if requires_expiration == "Yes":
+          expiration_date = st.date_input("Expiration Date")
+       else:
+          st.info("🛈 No expiration date registered.")
 
         submitted = st.form_submit_button("✅ Record Entry")
         if submitted:
@@ -194,19 +194,20 @@ else:
     st.download_button("⬇ Download CSV", df.to_csv(index=False).encode(), "inventory.csv", "text/csv")
 
     # ---------- GRAPH ----------
-    st.subheader("📈 Inventory Over Time")
+    st.subheader("📈 Inventory Over Time (Bar Graph by Product)")
     if not df.empty:
-        df['timestamp_in'] = pd.to_datetime(df['timestamp_in'], errors='coerce')
-        grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq='D')])['total_stock'].max().reset_index()
-        for product in grouped['product_name'].unique():
-            prod_df = grouped[grouped['product_name'] == product]
-            plt.figure()
-            plt.plot(prod_df['timestamp_in'], prod_df['total_stock'], marker='o')
-            plt.title(f"📈 Stock Over Time - {product}")
-            plt.xlabel("Date")
-            plt.ylabel("Total Stock")
-            plt.grid(True)
-            st.pyplot(plt)
+      df['timestamp_in'] = pd.to_datetime(df['timestamp_in'], errors='coerce')
+      grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq='D')])['total_stock'].max().reset_index()
+
+      fig = px.bar(
+         grouped,
+         x='timestamp_in',
+         y='total_stock',
+         color='product_name',
+         barmode='group',
+         title="📊 Stock Level per Product Over Time"
+      )
+      st.plotly_chart(fig, use_container_width=True)
 
     # ---------- RAW DATABASE TABLE ----------
     st.subheader("🗃️ Full Inventory Table (From Database)")
