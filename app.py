@@ -5,6 +5,7 @@ from datetime import datetime, timedelta  # ✅ Ensure this is included
 import pytz
 import hashlib
 import matplotlib.pyplot as plt
+import plotly.express as px
 
 # ---------- CONFIGURATION ----------
 DB_NAME = "inventory.db"
