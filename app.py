@@ -108,6 +108,7 @@ else:
     st.sidebar.success(f"Logged in as {st.session_state.username}")
 
     # ---------- STOCK FORM ----------
+   # 🔁 Add to your form inside the `if st.session_state.logged_in:` block
     with st.form("add_stock_form"):
         st.subheader("➕ Add Inventory Movement")
         product_name = st.text_input("Product Name")
@@ -116,7 +117,13 @@ else:
         stock_out = st.number_input("Stock Out", min_value=0, value=0)
         unit_price = st.number_input("Unit Price", min_value=0.0, format="%.2f")
         quantity = st.number_input("Quantity", min_value=1, value=1)
-        expiration_date = st.date_input("Expiration Date")
+
+        requires_expiration = st.radio("Does this product require an expiration date?", ("Yes", "No"))
+        expiration_date = None
+        if requires_expiration == "Yes":
+            expiration_date = st.date_input("Expiration Date")
+        else:
+            st.info("🛈 No expiration date registered.")
 
         submitted = st.form_submit_button("✅ Record Entry")
         if submitted:
@@ -142,13 +149,41 @@ else:
                 "quantity": quantity,
                 "total_price": total_price,
                 "total_units": total_units,
-                "expiration_date": expiration_date.strftime("%Y-%m-%d"),
+                "expiration_date": expiration_date.strftime("%Y-%m-%d") if expiration_date else None,
                 "username": st.session_state.username
             }
 
             insert_inventory(data)
             st.success(f"📦 Entry for **{product_name}** saved.")
 
+# 🔔 Show expiration warnings after displaying df
+    st.subheader("📊 Inventory Log")
+    st.dataframe(df, use_container_width=True)
+
+    if "expiration_date" in df.columns:
+        df['expiration_date'] = pd.to_datetime(df['expiration_date'], errors='coerce')
+        expired = df[df['expiration_date'] < datetime.now()]
+        expiring_soon = df[(df['expiration_date'] >= datetime.now()) & 
+                           (df['expiration_date'] <= datetime.now() + timedelta(days=7))]
+
+        if not expired.empty:
+            st.warning("⚠️ Some products have **expired**:")
+            st.dataframe(expired[["product_name", "batch_id", "expiration_date"]])
+
+        if not expiring_soon.empty:
+            st.info("🔔 Products **expiring soon** (within 7 days):")
+            st.dataframe(expiring_soon[["product_name", "batch_id", "expiration_date"]])
+
+# 🗑️ Add this section below the log and graph
+    st.subheader("🗑️ Delete Specific Inventory Row")
+    if not df.empty:
+        row_to_delete = st.selectbox("Select Row ID to Delete", df['id'].astype(str))
+        if st.button("Delete Selected Row"):
+            conn = sqlite3.connect(DB_NAME)
+            conn.execute("DELETE FROM inventory WHERE id = ? AND username = ?", (row_to_delete, st.session_state.username))
+            conn.commit()
+            conn.close()
+            st.success(f"✅ Row with ID {row_to_delete} deleted.")
     # ---------- LOAD & SHOW DATA ----------
     df = load_inventory(st.session_state.username)
     st.subheader("📊 Inventory Log")
