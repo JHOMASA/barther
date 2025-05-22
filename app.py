@@ -1,11 +1,13 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-from datetime import datetime, timedelta  # ✅ Ensure this is included
+from datetime import datetime, timedelta
 import pytz
 import hashlib
 import matplotlib.pyplot as plt
 import plotly.express as px
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 # ---------- CONFIGURATION ----------
 DB_NAME = "inventory.db"
@@ -74,6 +76,17 @@ def load_inventory(username):
     conn.close()
     return df
 
+# ---------- LOCAL LLM SETUP ----------
+@st.cache_resource
+def load_local_model():
+    tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.1")
+    model = AutoModelForCausalLM.from_pretrained(
+        "mistralai/Mistral-7B-Instruct-v0.1",
+        device_map="auto",
+        torch_dtype=torch.float16
+    )
+    return tokenizer, model
+
 # ---------- MAIN APP ----------
 create_tables()
 st.set_page_config("📦 Inventory Tracker", layout="wide")
@@ -82,7 +95,6 @@ st.title("📦 Inventory Management System - Lima Time")
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
-# ---------- LOGIN / REGISTER ----------
 if not st.session_state.logged_in:
     tab1, tab2 = st.tabs(["🔑 Login", "🆕 Register"])
 
@@ -109,10 +121,8 @@ if not st.session_state.logged_in:
 else:
     st.sidebar.success(f"Logged in as {st.session_state.username}")
 
-    # ---------- LOAD INVENTORY ----------
     df = load_inventory(st.session_state.username)
 
-    # ---------- STOCK FORM ----------
     with st.form("add_stock_form"):
         st.subheader("➕ Add Inventory Movement")
         product_name = st.text_input("Product Name")
@@ -125,9 +135,9 @@ else:
         requires_expiration = st.radio("Does this product require an expiration date?", ("Yes", "No"))
         expiration_date = None
         if requires_expiration == "Yes":
-          expiration_date = st.date_input("Expiration Date")
+            expiration_date = st.date_input("Expiration Date")
         else:
-          st.info("🛈 No expiration date registered.")
+            st.info("🛈 No expiration date registered.")
 
         submitted = st.form_submit_button("✅ Record Entry")
         if submitted:
@@ -160,11 +170,9 @@ else:
             st.success(f"📦 Entry for **{product_name}** saved.")
             st.experimental_rerun()
 
-    # ---------- DISPLAY INVENTORY ----------
     st.subheader("📊 Inventory Log")
     st.dataframe(df, use_container_width=True)
 
-    # ---------- EXPIRATION ALERTS ----------
     if "expiration_date" in df.columns:
         df['expiration_date'] = pd.to_datetime(df['expiration_date'], errors='coerce')
         expired = df[df['expiration_date'] < datetime.now()]
@@ -179,7 +187,6 @@ else:
             st.info("🔔 Products **expiring soon** (within 7 days):")
             st.dataframe(expiring_soon[["product_name", "batch_id", "expiration_date"]])
 
-    # ---------- DELETE ROW ----------
     st.subheader("🗑️ Delete Specific Inventory Row")
     if not df.empty:
         row_to_delete = st.selectbox("Select Row ID to Delete", df['id'].astype(str))
@@ -191,32 +198,28 @@ else:
             st.success(f"✅ Row with ID {row_to_delete} deleted.")
             st.experimental_rerun()
 
-    # ---------- DOWNLOAD ----------
     st.download_button("⬇ Download CSV", df.to_csv(index=False).encode(), "inventory.csv", "text/csv")
 
-    # ---------- GRAPH ----------
     st.subheader("📈 Inventory Over Time (Bar Graph by Product)")
     if not df.empty:
-      df['timestamp_in'] = pd.to_datetime(df['timestamp_in'], errors='coerce')
-      grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq='D')])['total_stock'].max().reset_index()
+        df['timestamp_in'] = pd.to_datetime(df['timestamp_in'], errors='coerce')
+        grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq='D')])['total_stock'].max().reset_index()
 
-      fig = px.bar(
-         grouped,
-         x='timestamp_in',
-         y='total_stock',
-         color='product_name',
-         barmode='group',
-         title="📊 Stock Level per Product Over Time"
-      )
-      st.plotly_chart(fig, use_container_width=True)
+        fig = px.bar(
+            grouped,
+            x='timestamp_in',
+            y='total_stock',
+            color='product_name',
+            barmode='group',
+            title="📊 Stock Level per Product Over Time"
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-    # ---------- RAW DATABASE TABLE ----------
     st.subheader("🗃️ Full Inventory Table (From Database)")
     conn = sqlite3.connect(DB_NAME)
     full_df = pd.read_sql("SELECT * FROM inventory WHERE username = ?", conn, params=(st.session_state.username,))
     st.dataframe(full_df, use_container_width=True)
 
-    # ---------- SQL QUERY ----------
     st.subheader("🧠 Custom SQL Query Engine")
     st.markdown("""
     Use SQL to run custom queries on your inventory.
@@ -241,3 +244,24 @@ else:
         except Exception as e:
             st.error(f"⚠️ SQL Error: {e}")
     conn.close()
+
+    # ---------- CHATBOT ----------
+    st.subheader("🤖 Ask InventoryBot")
+    user_question = st.text_input("Ask a question about your inventory:")
+    if user_question:
+        tokenizer, model = load_local_model()
+
+        inventory_context = df.to_string(index=False)
+        prompt = f"""You are InventoryBot. Answer the user's question based on the inventory below.
+
+INVENTORY:
+{inventory_context}
+
+Question: {user_question}
+Answer:"""
+
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        outputs = model.generate(**inputs, max_new_tokens=256)
+        answer = tokenizer.decode(outputs[0], skip_special_tokens=True).split("Answer:")[-1].strip()
+        st.success(answer)
+
