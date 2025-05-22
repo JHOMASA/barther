@@ -144,7 +144,7 @@ def generate_response(user_question, query_results):
     return answer
 
 # ---------- CHATBOT FOR INVENTORY QUESTIONS ----------
-st.subheader("\ud83d\udcac Ask Inventory Questions in Natural Language or SQL")
+st.subheader("Ask Inventory Questions in Natural Language or SQL")
 user_question = st.text_input("Ask a question or write a SQL query about your inventory:")
 
 # Display product name suggestions to guide users
@@ -165,4 +165,3 @@ if user_question and 'username' in st.session_state:
         st.info(f"💬 Assistant Response: {answer}")
     else:
         st.warning("⚠️ I'm sorry, I couldn't find any data matching your query.")
-
