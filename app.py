@@ -79,12 +79,8 @@ def load_inventory(username):
 # ---------- LOCAL LLM SETUP ----------
 @st.cache_resource
 def load_local_model():
-    tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.1")
-    model = AutoModelForCausalLM.from_pretrained(
-        "mistralai/Mistral-7B-Instruct-v0.1",
-        device_map="auto",
-        torch_dtype=torch.float16
-    )
+    tokenizer = AutoTokenizer.from_pretrained("sshleifer/tiny-gpt2")
+    model = AutoModelForCausalLM.from_pretrained("sshleifer/tiny-gpt2")
     return tokenizer, model
 
 # ---------- MAIN APP ----------
@@ -260,8 +256,8 @@ INVENTORY:
 Question: {user_question}
 Answer:"""
 
-        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-        outputs = model.generate(**inputs, max_new_tokens=256)
+        inputs = tokenizer(prompt, return_tensors="pt")
+        outputs = model.generate(**inputs, max_new_tokens=128)
         answer = tokenizer.decode(outputs[0], skip_special_tokens=True).split("Answer:")[-1].strip()
         st.success(answer)
 
