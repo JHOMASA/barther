@@ -250,6 +250,7 @@ else:
     # ---------- CHATBOT ----------
 
 # Initialize session state for API keys
+# Initialize session state for API keys
 if 'openrouter_api_key' not in st.session_state:
     st.session_state['openrouter_api_key'] = ''
 if 'cohere_api_key' not in st.session_state:
