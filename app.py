@@ -367,6 +367,53 @@ def generate_response(user_question, query_results):
     answer = response.choices[0].text.strip()
     return answer
 
+# ---------- INVENTORY CONTEXT FUNCTION ----------
+def get_inventory_context(username):
+    import sqlite3
+    import pandas as pd
+
+    conn = sqlite3.connect(DB_NAME)
+    df = pd.read_sql_query("SELECT * FROM inventory WHERE username = ?", conn, params=(username,))
+    conn.close()
+
+    if df.empty:
+        return "There is no inventory data for this user."
+
+    df['expiration_date'] = pd.to_datetime(df['expiration_date'], errors='coerce').dt.date
+    summary = df.groupby('product_name').agg({
+        'stock_in': 'sum',
+        'stock_out': 'sum',
+        'total_stock': 'last',
+        'expiration_date': 'last'
+    }).reset_index()
+
+    context_lines = []
+    for _, row in summary.iterrows():
+        context_lines.append(
+            f"Product: {row['product_name']}, Total In: {row['stock_in']}, "
+            f"Out: {row['stock_out']}, Current Stock: {row['total_stock']}, "
+            f"Last Expiry: {row['expiration_date']}"
+        )
+    return "\n".join(context_lines)
+
+# ---------- MODIFY CHAT SECTION TO INCLUDE CONTEXT ----------
+
+# Inside chat block:
+inventory_context = get_inventory_context(st.session_state.username)
+
+# Optionally show in the UI
+with st.expander("\U0001F4E6 Current Inventory Context", expanded=False):
+    st.markdown(inventory_context)
+
+# Then pass it into OpenRouter prompt:
+response = openrouter_client.chat.completions.create(
+    model="moonshotai/kimi-vl-a3b-thinking:free",
+    messages=[
+        {"role": "system", "content": f"You are an autonomous inventory management assistant. Here is the inventory context:\n\n{inventory_context}"},
+        {"role": "user", "content": summarized_prompt}
+    ]
+)
+
 
     # ---------- CHATBOT ----------
 
