@@ -251,6 +251,7 @@ else:
 
 # Initialize session state for API keys
 # Initialize session state for API keys
+# Initialize session state for API keys
 if 'openrouter_api_key' not in st.session_state:
     st.session_state['openrouter_api_key'] = ''
 if 'cohere_api_key' not in st.session_state:
@@ -322,7 +323,7 @@ if st.session_state['openrouter_api_key'] and st.session_state['cohere_api_key']
                         {"role": "user", "content": summarized_prompt}
                     ]
                 )
-                full_response = response.choices[0].message["content"]
+                full_response = response.choices[0].message.content
                 message_placeholder.markdown(full_response)
             except Exception as e:
                 message_placeholder.markdown(f"⚠️ An error occurred: {e}")
