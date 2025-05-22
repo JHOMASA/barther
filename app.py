@@ -250,6 +250,7 @@ else:
     # ---------- CHATBOT ----------
 
 # Initialize session state for API keys
+# Initialize session state for API keys
 if 'openrouter_api_key' not in st.session_state:
     st.session_state['openrouter_api_key'] = ''
 if 'cohere_api_key' not in st.session_state:
@@ -334,5 +335,4 @@ if st.session_state['openrouter_api_key'] and st.session_state['cohere_api_key']
             # Append assistant response to chat history
             st.session_state['auto_gpt_chat_history'].append({"role": "assistant", "content": full_response})
 else:
-    st.warning("Please enter both your OpenRouter and Cohere API keys to use the AutoGPT-like assistant.")
     st.warning("Please enter both your OpenRouter and Cohere API keys to use the AutoGPT-like assistant.")
