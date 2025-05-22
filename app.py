@@ -250,8 +250,6 @@ else:
     # ---------- CHATBOT ----------
 
 # Initialize session state for API keys
-# Initialize session state for API keys
-# Initialize session state for API keys
 if 'openrouter_api_key' not in st.session_state:
     st.session_state['openrouter_api_key'] = ''
 if 'cohere_api_key' not in st.session_state:
@@ -305,15 +303,19 @@ if st.session_state['openrouter_api_key'] and st.session_state['cohere_api_key']
             full_response = ""
 
             try:
-                # Use Cohere to summarize the user's intent
-                cohere_response = cohere_client.summarize(
-                    text=prompt,
-                    length='short',
-                    format='plain',
-                    model='summarize-xlarge',
-                    additional_command='Summarize the task for Kimi AI.'
-                )
-                summarized_prompt = cohere_response.summary
+                # Check if prompt length meets Cohere's minimum requirement
+                if len(prompt) >= 250:
+                    # Use Cohere to summarize the user's intent
+                    cohere_response = cohere_client.summarize(
+                        text=prompt,
+                        length='short',
+                        format='plain',
+                        model='summarize-xlarge',
+                        additional_command='Summarize the task for Kimi AI.'
+                    )
+                    summarized_prompt = cohere_response.summary
+                else:
+                    summarized_prompt = prompt  # Use original prompt if too short for summarization
 
                 # Use Kimi AI to process the summarized prompt
                 response = openrouter_client.chat.completions.create(
@@ -332,4 +334,5 @@ if st.session_state['openrouter_api_key'] and st.session_state['cohere_api_key']
             # Append assistant response to chat history
             st.session_state['auto_gpt_chat_history'].append({"role": "assistant", "content": full_response})
 else:
+    st.warning("Please enter both your OpenRouter and Cohere API keys to use the AutoGPT-like assistant.")
     st.warning("Please enter both your OpenRouter and Cohere API keys to use the AutoGPT-like assistant.")
