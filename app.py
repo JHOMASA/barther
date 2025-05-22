@@ -404,18 +404,24 @@ if 'username' in st.session_state:
     with st.expander("\U0001F4E6 Current Inventory Context", expanded=False):
         st.markdown(inventory_context)
 
-    # Then pass it into OpenRouter prompt:
-    response = openrouter_client.chat.completions.create(
-        model="moonshotai/kimi-vl-a3b-thinking:free",
-        messages=[
-            {"role": "system", "content": f"You are an autonomous inventory management assistant. Here is the inventory context:\n\n{inventory_context}"},
-            {"role": "user", "content": summarized_prompt}
-        ]
-    )
+    if st.session_state.get('openrouter_api_key') and st.session_state.get('cohere_api_key'):
+        openrouter_client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=st.session_state['openrouter_api_key']
+        )
+
+        response = openrouter_client.chat.completions.create(
+            model="moonshotai/kimi-vl-a3b-thinking:free",
+            messages=[
+                {"role": "system", "content": f"You are an autonomous inventory management assistant. Here is the inventory context:\n\n{inventory_context}"},
+                {"role": "user", "content": summarized_prompt}
+            ]
+        )
 else:
     inventory_context = "No user logged in yet."
     with st.expander("\U0001F4E6 Current Inventory Context", expanded=False):
         st.markdown(inventory_context)
+
 
 
 
