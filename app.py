@@ -399,20 +399,24 @@ def get_inventory_context(username):
 # ---------- MODIFY CHAT SECTION TO INCLUDE CONTEXT ----------
 
 # Inside chat block:
-inventory_context = get_inventory_context(st.session_state.username)
+if 'username' in st.session_state:
+    inventory_context = get_inventory_context(st.session_state.username)
+    with st.expander("\U0001F4E6 Current Inventory Context", expanded=False):
+        st.markdown(inventory_context)
 
-# Optionally show in the UI
-with st.expander("\U0001F4E6 Current Inventory Context", expanded=False):
-    st.markdown(inventory_context)
+    # Then pass it into OpenRouter prompt:
+    response = openrouter_client.chat.completions.create(
+        model="moonshotai/kimi-vl-a3b-thinking:free",
+        messages=[
+            {"role": "system", "content": f"You are an autonomous inventory management assistant. Here is the inventory context:\n\n{inventory_context}"},
+            {"role": "user", "content": summarized_prompt}
+        ]
+    )
+else:
+    inventory_context = "No user logged in yet."
+    with st.expander("\U0001F4E6 Current Inventory Context", expanded=False):
+        st.markdown(inventory_context)
 
-# Then pass it into OpenRouter prompt:
-response = openrouter_client.chat.completions.create(
-    model="moonshotai/kimi-vl-a3b-thinking:free",
-    messages=[
-        {"role": "system", "content": f"You are an autonomous inventory management assistant. Here is the inventory context:\n\n{inventory_context}"},
-        {"role": "user", "content": summarized_prompt}
-    ]
-)
 
 
     # ---------- CHATBOT ----------
