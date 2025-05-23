@@ -120,13 +120,13 @@ def show_inventory_graph(username):
 
     grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq='D')])['total_stock'].max().reset_index()
 
-    fig = px.line(
+    fig = px.bar(
         grouped,
         x='timestamp_in',
         y='total_stock',
         color='product_name',
-        title="📈 Daily Stock Trends by Product",
-        markers=True,
+        title="📊 Daily Stock Trends by Product",
+        barmode='group',
         labels={'timestamp_in': 'Date', 'total_stock': 'Stock Level'}
     )
     fig.update_layout(
@@ -140,6 +140,7 @@ def show_inventory_graph(username):
         font=dict(size=14)
     )
     st.plotly_chart(fig, use_container_width=True)
+
 # ---------- SQL EXPLORER SECTION ----------
 def show_sql_explorer(username):
     st.subheader("🧠 SQL Explorer")
