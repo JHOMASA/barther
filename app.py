@@ -79,10 +79,8 @@ def load_inventory(username):
     conn.close()
     return df
 
+# ---------- INVENTORY CONTEXT FUNCTION ----------
 def get_inventory_context(username):
-    import sqlite3
-    import pandas as pd
-
     conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql_query("SELECT * FROM inventory WHERE username = ?", conn, params=(username,))
     conn.close()
@@ -107,11 +105,75 @@ def get_inventory_context(username):
         )
     return "\n".join(context_lines)
 
+# ---------- INVENTORY VISUALIZATION GRAPH ----------
+def show_inventory_graph(username):
+    conn = sqlite3.connect(DB_NAME)
+    df = pd.read_sql_query("SELECT * FROM inventory WHERE username = ?", conn, params=(username,))
+    conn.close()
+
+    if df.empty:
+        st.info("No inventory data available to display the graph.")
+        return
+
+    df['timestamp_in'] = pd.to_datetime(df['timestamp_in'], errors='coerce')
+    df = df.dropna(subset=['timestamp_in'])
+
+    grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq='D')])['total_stock'].max().reset_index()
+
+    fig = px.line(
+        grouped,
+        x='timestamp_in',
+        y='total_stock',
+        color='product_name',
+        title="📈 Daily Stock Trends by Product",
+        markers=True,
+        labels={'timestamp_in': 'Date', 'total_stock': 'Stock Level'}
+    )
+    fig.update_layout(
+        legend_title_text='Product Name',
+        xaxis_title='Date',
+        yaxis_title='Stock Quantity',
+        hovermode='x unified',
+        template='plotly_white',
+        height=500,
+        margin=dict(l=20, r=20, t=60, b=20),
+        font=dict(size=14)
+    )
+    st.plotly_chart(fig, use_container_width=True)
+# ---------- SQL EXPLORER SECTION ----------
+def show_sql_explorer(username):
+    st.subheader("🧠 SQL Explorer")
+    st.markdown("You can write SQL queries below using the `inventory` table. Example:")
+    st.code(f"SELECT product_name, SUM(total_stock) as total_stock FROM inventory WHERE username = '{username}' GROUP BY product_name", language="sql")
+
+    query_input = st.text_area("Write your SQL query:")
+
+    if st.button("▶ Run SQL Query"):
+        conn = sqlite3.connect(DB_NAME)
+        try:
+            df_query = pd.read_sql_query(query_input, conn)
+            st.success("✅ Query executed successfully")
+            st.dataframe(df_query, use_container_width=True)
+        except Exception as e:
+            st.error(f"❌ SQL Error: {e}")
+        finally:
+            conn.close()
+
+# ---------- GRAPH4NLP SIMULATION ----------
+def visualize_reasoning_with_graph4nlp(steps):
+    dot = Digraph()
+    dot.attr(rankdir='LR')
+    for i, step in enumerate(steps):
+        dot.node(f"{i+1}", step['step'])
+        if i > 0:
+            dot.edge(f"{i}", f"{i+1}")
+    return dot
+
+# ---------- MINI AUTOGPT LOOP FUNCTION ----------
 # ---------- MINI AUTOGPT LOOP FUNCTION ----------
 def run_reasoning_loop(user_goal, inventory_context, cohere_client, openrouter_client):
     loop_history = []
 
-    # Step 1: Use Cohere to break down the task
     task_plan = cohere_client.generate(
         model='command',
         prompt=f"Break down this goal into step-by-step reasoning tasks.\n\nGoal: {user_goal}",
@@ -119,12 +181,14 @@ def run_reasoning_loop(user_goal, inventory_context, cohere_client, openrouter_c
         temperature=0.5
     )
     steps = task_plan.generations[0].text.strip().split("\n")
-    steps = [step for step in steps if step.strip() and step[0].isdigit()]  # Keep only numbered steps
+    steps = [step for step in steps if step.strip() and step[0].isdigit()]
 
     for step in steps:
         current_step = step.split(".", 1)[-1].strip()
 
-        # Step 2: Execute with Kimi
+        if 'interruption' in st.session_state and st.session_state['interruption']:
+            current_step += f" (Note: User previously asked: {st.session_state['interruption']})"
+
         response = openrouter_client.chat.completions.create(
             model="moonshotai/kimi-vl-a3b-thinking:free",
             messages=[
@@ -136,7 +200,13 @@ def run_reasoning_loop(user_goal, inventory_context, cohere_client, openrouter_c
 
         loop_history.append({"step": current_step, "result": result})
 
-        # Step 3: Reflection
+        follow_up = st.text_input(f"💬 Ask a follow-up or clarify step '{current_step}' (optional)", key=current_step)
+        if follow_up:
+            st.session_state['interruption'] = follow_up
+            break
+        else:
+            st.session_state['interruption'] = None
+
         reflection_prompt = f"""
         You just completed the step: {current_step}.
         Result: {result}
@@ -152,6 +222,7 @@ def run_reasoning_loop(user_goal, inventory_context, cohere_client, openrouter_c
             break
 
     return loop_history
+
 # ---------- EMAIL SENDING FUNCTION ----------
 def send_email_with_attachment(to_address, subject, body, attachment_name, attachment_data):
     import smtplib
@@ -174,75 +245,65 @@ def send_email_with_attachment(to_address, subject, body, attachment_name, attac
 
 # ---------- CHAT ENTRY POINT ----------
 if 'username' in st.session_state:
+    st.markdown("### 📈 Inventory Visualization")
+    show_inventory_graph(st.session_state.username)
+
     inventory_context = get_inventory_context(st.session_state.username)
-    with st.expander("\U0001F4E6 Current Inventory Context", expanded=False):
+    with st.expander("📦 Current Inventory Context", expanded=False):
         st.markdown(inventory_context)
 
-    if st.session_state.get('openrouter_api_key') and st.session_state.get('cohere_api_key'):
-        openrouter_client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=st.session_state['openrouter_api_key']
-        )
-        cohere_client = cohere.Client(st.session_state['cohere_api_key'])
+    st.subheader("🧠 AutoGPT-like Inventory Reasoning")
+    user_goal = st.text_input("What do you want to achieve with your inventory?", key="user_goal_input")
+    email_address = st.text_input("Recipient email (optional)")
+    permission_level = st.selectbox("Access level", ["admin", "owner", "reviewer"])
 
-        st.subheader("🌀 Small-Scale AutoGPT Inventory Loop")
-        user_goal = st.text_input("What inventory task should I solve?")
+    if st.button("🔁 Start Reasoning") and user_goal:
+        with st.spinner("Running reasoning loop..."):
+            openrouter_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=st.session_state['openrouter_api_key'])
+            cohere_client = cohere.Client(st.session_state['cohere_api_key'])
+            loop_results = run_reasoning_loop(user_goal, inventory_context, cohere_client, openrouter_client)
 
-        # Email and permission entry
-        st.markdown("#### 🔐 Export & Access Control")
-        email_address = st.text_input("Enter recipient email")
-        permission_level = st.selectbox("Select access level", ["admin", "owner", "reviewer"])
+        if 'reasoning_logs' not in st.session_state:
+            st.session_state['reasoning_logs'] = []
+        st.session_state['reasoning_logs'].append({"goal": user_goal, "results": loop_results, "email": email_address, "access": permission_level})
 
-        if st.button("🔁 Run Reasoning Loop") and user_goal:
-            with st.spinner("Running reasoning loop..."):
-                loop_results = run_reasoning_loop(user_goal, inventory_context, cohere_client, openrouter_client)
+        st.success("✅ Reasoning completed")
+        for i, step in enumerate(loop_results):
+            st.markdown(f"**Step {i+1}: {step['step']}**")
+            st.markdown(f"Result: {step['result']}")
 
-            if 'reasoning_logs' not in st.session_state:
-                st.session_state['reasoning_logs'] = []
-            st.session_state['reasoning_logs'].append({"goal": user_goal, "results": loop_results, "email": email_address, "access": permission_level})
+        export_df = pd.DataFrame(loop_results)
+        csv = export_df.to_csv(index=False).encode('utf-8')
+        json_data = export_df.to_json(orient='records', indent=2).encode('utf-8')
 
-            st.success("✅ Loop completed")
-            for i, step in enumerate(loop_results):
-                st.markdown(f"**Step {i+1}: {step['step']}**")
-                st.markdown(f"Result: {step['result']}")
+        st.download_button("⬇ Download CSV", csv, f"reasoning_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", "text/csv")
+        st.download_button("⬇ Download JSON", json_data, f"reasoning_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json", "application/json")
 
-            import io
-            import pandas as pd
-            from datetime import datetime
+        if email_address and st.checkbox("📧 Email this report"):
+            try:
+                send_email_with_attachment(
+                    to_address=email_address,
+                    subject="Inventory Reasoning Report",
+                    body=f"See the reasoning result for: {user_goal}",
+                    attachment_name="reasoning.csv",
+                    attachment_data=csv
+                )
+                st.success(f"📬 Sent to {email_address}")
+            except Exception as e:
+                st.error(f"❌ Email failed: {e}")
 
-            export_df = pd.DataFrame(loop_results)
-            csv = export_df.to_csv(index=False).encode('utf-8')
-            json_data = export_df.to_json(orient='records', indent=2).encode('utf-8')
+    show_sql_explorer(st.session_state.username)
 
-            st.download_button("⬇ Download as CSV", csv, f"reasoning_loop_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", "text/csv")
-            st.download_button("⬇ Download as JSON", json_data, f"reasoning_loop_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json", "application/json")
-
-            st.info(f"Access to this report is limited to: **{permission_level}** at {email_address}")
-
-            if st.checkbox("📧 Send this report to the email above"):
-                try:
-                    send_email_with_attachment(
-                        to_address=email_address,
-                        subject="Inventory Reasoning Report",
-                        body=f"Attached is the report for: {user_goal}\nAccess Level: {permission_level}",
-                        attachment_name="reasoning_loop.csv",
-                        attachment_data=csv
-                    )
-                    st.success(f"📬 Email sent to {email_address}")
-                except Exception as e:
-                    st.error(f"❌ Failed to send email: {e}")
-
-        if st.session_state.get('reasoning_logs'):
-            st.subheader("🧾 Previous Reasoning Loops")
-            for log in st.session_state['reasoning_logs']:
-                st.markdown(f"### Goal: {log['goal']}")
-                st.markdown(f"**Shared with:** {log['email']} ({log['access']})")
-                for i, step in enumerate(log['results']):
-                    st.markdown(f"- **Step {i+1}**: {step['step']}")
-                    st.markdown(f"  ➤ {step['result']}")
+    if 'reasoning_logs' in st.session_state and st.session_state['reasoning_logs']:
+        latest_steps = st.session_state['reasoning_logs'][-1]['results']
+        st.markdown("#### 🔗 Graph4NLP Reasoning Graph")
+        st.graphviz_chart(visualize_reasoning_with_graph4nlp(latest_steps))
+    else:
+        st.markdown("#### 🔗 Graph4NLP Reasoning Graph")
+        st.info("Run the reasoning loop to visualize reasoning steps as a graph.")
 else:
     inventory_context = "No user logged in yet."
-    with st.expander("\U0001F4E6 Current Inventory Context", expanded=False):
+    with st.expander("📦 Current Inventory Context", expanded=False):
         st.markdown(inventory_context)
 
 # ---------- APP ----------
