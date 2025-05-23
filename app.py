@@ -410,17 +410,35 @@ if 'username' in st.session_state:
             api_key=st.session_state['openrouter_api_key']
         )
 
-        response = openrouter_client.chat.completions.create(
-            model="moonshotai/kimi-vl-a3b-thinking:free",
-            messages=[
-                {"role": "system", "content": f"You are an autonomous inventory management assistant. Here is the inventory context:\n\n{inventory_context}"},
-                {"role": "user", "content": summarized_prompt}
+        prompt_to_summarize = ""
+        if 'auto_gpt_chat_history' in st.session_state and st.session_state['auto_gpt_chat_history']:
+            last_user_message = [
+                msg["content"] for msg in st.session_state['auto_gpt_chat_history']
+                if msg["role"] == "user"
             ]
-        )
-else:
-    inventory_context = "No user logged in yet."
-    with st.expander("\U0001F4E6 Current Inventory Context", expanded=False):
-        st.markdown(inventory_context)
+            if last_user_message:
+                prompt_to_summarize = last_user_message[-1]
+
+        if prompt_to_summarize:
+            if len(prompt_to_summarize) >= 250:
+                cohere_response = cohere_client.summarize(
+                    text=prompt_to_summarize,
+                    length='short',
+                    format='plain',
+                    model='summarize-xlarge',
+                    additional_command='Summarize the task for Kimi AI.'
+                )
+                summarized_prompt = cohere_response.summary
+            else:
+                summarized_prompt = prompt_to_summarize
+
+            response = openrouter_client.chat.completions.create(
+                model="moonshotai/kimi-vl-a3b-thinking:free",
+                messages=[
+                    {"role": "system", "content": f"You are an autonomous inventory management assistant. Here is the inventory context:\n\n{inventory_context}"},
+                    {"role": "user", "content": summarized_prompt}
+                ]
+            )
 
 
 
