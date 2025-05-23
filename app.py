@@ -23,14 +23,11 @@ lima_tz = pytz.timezone("America/Lima")
 def create_tables():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         username TEXT PRIMARY KEY,
         password TEXT NOT NULL
-    )
-    """)
-
+    )""")
     c.execute("""
     CREATE TABLE IF NOT EXISTS inventory (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,8 +44,7 @@ def create_tables():
         total_units INTEGER,
         expiration_date TEXT,
         username TEXT
-    )
-    """)
+    )""")
     conn.commit()
     conn.close()
 
@@ -82,75 +78,29 @@ def load_inventory(username):
     conn.close()
     return df
 
-# ---------- NATURAL LANGUAGE TO SQL ----------
-def generate_sql_query(user_question, username):
-    schema = """
-    Table: inventory
-    Columns:
-      - id (INTEGER)
-      - timestamp_in (TEXT)
-      - timestamp_out (TEXT)
-      - product_name (TEXT)
-      - batch_id (TEXT)
-      - stock_in (INTEGER)
-      - stock_out (INTEGER)
-      - total_stock (INTEGER)
-      - unit_price (REAL)
-      - quantity (INTEGER)
-      - total_price (REAL)
-      - total_units (INTEGER)
-      - expiration_date (TEXT)
-      - username (TEXT)
-    """
-    prompt = f"""
-    You are a SQL assistant. Translate the following user input into a valid SQL query for a SQLite database.
-
-    {schema}
-
-    Always include a WHERE clause filtering by username = '{username}'.
-    If the input is already SQL, keep it as is but ensure it includes WHERE username = '{username}'.
-
-    Input: {user_question}
-
-    SQL:
-    """
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
-        max_tokens=150,
-        temperature=0
-    )
-    sql_query = response.choices[0].text.strip()
-    return sql_query
-
-def execute_sql_query(sql_query):
+def get_inventory_context(username):
     conn = sqlite3.connect(DB_NAME)
-    try:
-        df = pd.read_sql_query(sql_query, conn)
-    except Exception as e:
-        df = pd.DataFrame()
+    df = pd.read_sql_query("SELECT * FROM inventory WHERE username = ?", conn, params=(username,))
     conn.close()
-    return df
+    if df.empty:
+        return "There is no inventory data for this user."
+    df['expiration_date'] = pd.to_datetime(df['expiration_date'], errors='coerce').dt.date
+    summary = df.groupby('product_name').agg({
+        'stock_in': 'sum',
+        'stock_out': 'sum',
+        'total_stock': 'last',
+        'expiration_date': 'last'
+    }).reset_index()
+    context_lines = []
+    for _, row in summary.iterrows():
+        context_lines.append(
+            f"Product: {row['product_name']}, Total In: {row['stock_in']}, "
+            f"Out: {row['stock_out']}, Current Stock: {row['total_stock']}, "
+            f"Last Expiry: {row['expiration_date']}"
+        )
+    return "\n".join(context_lines)
 
-def generate_response(user_question, query_results):
-    context = query_results.to_string(index=False)
-    prompt = f"Based on the following data:\n{context}\n\nAnswer the question: {user_question}"
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
-        max_tokens=150,
-        temperature=0
-    )
-    answer = response.choices[0].text.strip()
-    return answer
-# ---------- LOCAL LLM SETUP ----------
-@st.cache_resource
-def load_local_model():
-    tokenizer = AutoTokenizer.from_pretrained("sshleifer/tiny-gpt2")
-    model = AutoModelForCausalLM.from_pretrained("sshleifer/tiny-gpt2")
-    return tokenizer, model
-
-# ---------- MAIN APP ----------
+# ---------- APP ----------
 create_tables()
 st.set_page_config("📦 Inventory Tracker", layout="wide")
 st.title("📦 Inventory Management System - Lima Time")
@@ -160,7 +110,6 @@ if 'logged_in' not in st.session_state:
 
 if not st.session_state.logged_in:
     tab1, tab2 = st.tabs(["🔑 Login", "🆕 Register"])
-
     with tab1:
         st.subheader("Login")
         username = st.text_input("Username")
@@ -173,7 +122,6 @@ if not st.session_state.logged_in:
                 st.experimental_rerun()
             else:
                 st.error("❌ Invalid credentials")
-
     with tab2:
         st.subheader("Register")
         new_user = st.text_input("New Username")
@@ -181,38 +129,32 @@ if not st.session_state.logged_in:
         if st.button("Register"):
             add_user(new_user, new_pass)
             st.success("✅ Account created! You can now login.")
+
 else:
     st.sidebar.success(f"Logged in as {st.session_state.username}")
-
     df = load_inventory(st.session_state.username)
 
-    with st.form("add_stock_form"):
-        st.subheader("➕ Add Inventory Movement")
+    st.subheader("➕ Add Inventory Movement")
+    with st.form("add_form"):
         product_name = st.text_input("Product Name")
         batch_id = st.text_input("Batch ID")
         stock_in = st.number_input("Stock In", min_value=0, value=0)
         stock_out = st.number_input("Stock Out", min_value=0, value=0)
         unit_price = st.number_input("Unit Price", min_value=0.0, format="%.2f")
         quantity = st.number_input("Quantity", min_value=1, value=1)
-
         requires_expiration = st.radio("Does this product require an expiration date?", ("Yes", "No"))
         expiration_date = None
         if requires_expiration == "Yes":
             expiration_date = st.date_input("Expiration Date")
         else:
             st.info("🛈 No expiration date registered.")
-
         submitted = st.form_submit_button("✅ Record Entry")
         if submitted:
             now = datetime.now(lima_tz)
             total_units = stock_in - stock_out
             total_price = unit_price * quantity
-            prev_stock = (
-                df[df["product_name"] == product_name]["total_stock"].iloc[-1]
-                if product_name in df["product_name"].values else 0
-            )
+            prev_stock = df[df["product_name"] == product_name]["total_stock"].iloc[-1] if product_name in df["product_name"].values else 0
             new_stock = prev_stock + total_units
-
             data = {
                 "timestamp_in": now.strftime("%Y-%m-%d %H:%M:%S") if stock_in > 0 else None,
                 "timestamp_out": now.strftime("%Y-%m-%d %H:%M:%S") if stock_out > 0 else None,
@@ -228,7 +170,6 @@ else:
                 "expiration_date": expiration_date.strftime("%Y-%m-%d") if expiration_date else None,
                 "username": st.session_state.username
             }
-
             insert_inventory(data)
             st.success(f"📦 Entry for **{product_name}** saved.")
             st.experimental_rerun()
@@ -236,299 +177,69 @@ else:
     st.subheader("📊 Inventory Log")
     st.dataframe(df, use_container_width=True)
 
-    if "expiration_date" in df.columns:
-        df['expiration_date'] = pd.to_datetime(df['expiration_date'], errors='coerce')
-        expired = df[df['expiration_date'] < datetime.now()]
-        expiring_soon = df[(df['expiration_date'] >= datetime.now()) &
-                           (df['expiration_date'] <= datetime.now() + timedelta(days=7))]
+    # ---------- AutoGPT-style Assistant ----------
+    st.subheader("🤖 AutoGPT-style Inventory Assistant")
 
-        if not expired.empty:
-            st.warning("⚠️ Some products have **expired**:")
-            st.dataframe(expired[["product_name", "batch_id", "expiration_date"]])
+    if 'openrouter_api_key' not in st.session_state:
+        st.session_state['openrouter_api_key'] = ''
+    if 'cohere_api_key' not in st.session_state:
+        st.session_state['cohere_api_key'] = ''
 
-        if not expiring_soon.empty:
-            st.info("🔔 Products **expiring soon** (within 7 days):")
-            st.dataframe(expiring_soon[["product_name", "batch_id", "expiration_date"]])
+    with st.expander("🔐 Enter Your API Keys"):
+        openrouter_api_key = st.text_input("OpenRouter API Key", type="password")
+        cohere_api_key = st.text_input("Cohere API Key", type="password")
+        if openrouter_api_key:
+            st.session_state['openrouter_api_key'] = openrouter_api_key
+            st.success("OpenRouter API key saved successfully!")
+        if cohere_api_key:
+            st.session_state['cohere_api_key'] = cohere_api_key
+            st.success("Cohere API key saved successfully!")
 
-    st.subheader("🗑️ Delete Specific Inventory Row")
-    if not df.empty:
-        row_to_delete = st.selectbox("Select Row ID to Delete", df['id'].astype(str))
-        if st.button("Delete Selected Row"):
-            conn = sqlite3.connect(DB_NAME)
-            conn.execute("DELETE FROM inventory WHERE id = ? AND username = ?", (row_to_delete, st.session_state.username))
-            conn.commit()
-            conn.close()
-            st.success(f"✅ Row with ID {row_to_delete} deleted.")
-            st.experimental_rerun()
+    if st.session_state['openrouter_api_key'] and st.session_state['cohere_api_key']:
+        openrouter_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=st.session_state['openrouter_api_key'])
+        cohere_client = cohere.Client(st.session_state['cohere_api_key'])
 
-    st.download_button("⬇ Download CSV", df.to_csv(index=False).encode(), "inventory.csv", "text/csv")
+        if 'auto_gpt_chat_history' not in st.session_state:
+            st.session_state['auto_gpt_chat_history'] = []
 
-    st.subheader("📈 Inventory Over Time (Bar Graph by Product)")
-    if not df.empty:
-        df['timestamp_in'] = pd.to_datetime(df['timestamp_in'], errors='coerce')
-        grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq='D')])['total_stock'].max().reset_index()
+        for message in st.session_state['auto_gpt_chat_history']:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
-        fig = px.bar(
-            grouped,
-            x='timestamp_in',
-            y='total_stock',
-            color='product_name',
-            barmode='group',
-            title="📊 Stock Level per Product Over Time"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        if prompt := st.chat_input("Describe your inventory task..."):
+            st.session_state['auto_gpt_chat_history'].append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
 
-    st.subheader("🗃️ Full Inventory Table (From Database)")
-    conn = sqlite3.connect(DB_NAME)
-    full_df = pd.read_sql("SELECT * FROM inventory WHERE username = ?", conn, params=(st.session_state.username,))
-    st.dataframe(full_df, use_container_width=True)
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                full_response = ""
+                try:
+                    if len(prompt) >= 250:
+                        summary = cohere_client.summarize(
+                            text=prompt,
+                            length='short',
+                            format='plain',
+                            model='summarize-xlarge',
+                            additional_command='Summarize the task for Kimi AI.'
+                        ).summary
+                    else:
+                        summary = prompt
 
-    st.subheader("🧠 Custom SQL Query Engine")
-    st.markdown("""
-    Use SQL to run custom queries on your inventory.
-    Example:
-    ```sql
-    SELECT product_name, SUM(stock_in) AS total_in
-    FROM inventory
-    WHERE username = 'your_username'
-    GROUP BY product_name
-    ```
-    """)
-
-    query_input = st.text_area("Write SQL Query",
-        value=f"SELECT product_name, SUM(total_stock) as total FROM inventory WHERE username = '{st.session_state.username}' GROUP BY product_name")
-
-    if st.button("🚀 Run SQL Query"):
-        try:
-            user_query = query_input.replace(";", "")
-            df_query = pd.read_sql_query(user_query, conn)
-            st.success("✅ Query executed successfully")
-            st.dataframe(df_query, use_container_width=True)
-        except Exception as e:
-            st.error(f"⚠️ SQL Error: {e}")
-    conn.close()
-def generate_sql_query(user_question):
-    schema = """
-    Table: inventory
-    Columns:
-      - id (INTEGER)
-      - timestamp_in (TEXT)
-      - timestamp_out (TEXT)
-      - product_name (TEXT)
-      - batch_id (TEXT)
-      - stock_in (INTEGER)
-      - stock_out (INTEGER)
-      - total_stock (INTEGER)
-      - unit_price (REAL)
-      - quantity (INTEGER)
-      - total_price (REAL)
-      - total_units (INTEGER)
-      - expiration_date (TEXT)
-      - username (TEXT)
-    """
-    prompt = f"""
-    You are a SQL assistant. Translate the following user input into a valid SQL query for a SQLite database.
-
-    {schema}
-
-    If the input is already SQL, keep it as is.
-
-    Input: {user_question}
-
-    SQL:
-    """
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
-        max_tokens=150,
-        temperature=0
-    )
-    sql_query = response.choices[0].text.strip()
-    return sql_query
-
-def execute_sql_query(sql_query):
-    conn = sqlite3.connect(DB_NAME)
-    try:
-        df = pd.read_sql_query(sql_query, conn)
-    except Exception as e:
-        df = pd.DataFrame()
-    conn.close()
-    return df
-
-def generate_response(user_question, query_results):
-    context = query_results.to_string(index=False)
-    prompt = f"Based on the following data:\n{context}\n\nAnswer the question: {user_question}"
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
-        max_tokens=150,
-        temperature=0
-    )
-    answer = response.choices[0].text.strip()
-    return answer
-
-# ---------- INVENTORY CONTEXT FUNCTION ----------
-def get_inventory_context(username):
-    import sqlite3
-    import pandas as pd
-
-    conn = sqlite3.connect(DB_NAME)
-    df = pd.read_sql_query("SELECT * FROM inventory WHERE username = ?", conn, params=(username,))
-    conn.close()
-
-    if df.empty:
-        return "There is no inventory data for this user."
-
-    df['expiration_date'] = pd.to_datetime(df['expiration_date'], errors='coerce').dt.date
-    summary = df.groupby('product_name').agg({
-        'stock_in': 'sum',
-        'stock_out': 'sum',
-        'total_stock': 'last',
-        'expiration_date': 'last'
-    }).reset_index()
-
-    context_lines = []
-    for _, row in summary.iterrows():
-        context_lines.append(
-            f"Product: {row['product_name']}, Total In: {row['stock_in']}, "
-            f"Out: {row['stock_out']}, Current Stock: {row['total_stock']}, "
-            f"Last Expiry: {row['expiration_date']}"
-        )
-    return "\n".join(context_lines)
-
-# ---------- MODIFY CHAT SECTION TO INCLUDE CONTEXT ----------
-
-# Inside chat block:
-if 'username' in st.session_state:
-    inventory_context = get_inventory_context(st.session_state.username)
-    with st.expander("\U0001F4E6 Current Inventory Context", expanded=False):
-        st.markdown(inventory_context)
-
-    if st.session_state.get('openrouter_api_key') and st.session_state.get('cohere_api_key'):
-        openrouter_client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=st.session_state['openrouter_api_key']
-        )
-
-        prompt_to_summarize = ""
-        if 'auto_gpt_chat_history' in st.session_state and st.session_state['auto_gpt_chat_history']:
-            last_user_message = [
-                msg["content"] for msg in st.session_state['auto_gpt_chat_history']
-                if msg["role"] == "user"
-            ]
-            if last_user_message:
-                prompt_to_summarize = last_user_message[-1]
-
-        if prompt_to_summarize:
-            if len(prompt_to_summarize) >= 250:
-                cohere_response = cohere_client.summarize(
-                    text=prompt_to_summarize,
-                    length='short',
-                    format='plain',
-                    model='summarize-xlarge',
-                    additional_command='Summarize the task for Kimi AI.'
-                )
-                summarized_prompt = cohere_response.summary
-            else:
-                summarized_prompt = prompt_to_summarize
-
-            response = openrouter_client.chat.completions.create(
-                model="moonshotai/kimi-vl-a3b-thinking:free",
-                messages=[
-                    {"role": "system", "content": f"You are an autonomous inventory management assistant. Here is the inventory context:\n\n{inventory_context}"},
-                    {"role": "user", "content": summarized_prompt}
-                ]
-            )
-
-
-
-
-    # ---------- CHATBOT ----------
-
-# Initialize session state for API keys
-# Initialize session state for API keys
-if 'openrouter_api_key' not in st.session_state:
-    st.session_state['openrouter_api_key'] = ''
-if 'cohere_api_key' not in st.session_state:
-    st.session_state['cohere_api_key'] = ''
-
-st.subheader("🤖 AutoGPT-like Inventory Assistant")
-
-# Prompt user for API Keys
-with st.expander("🔐 Enter Your API Keys", expanded=False):
-    openrouter_api_key = st.text_input("OpenRouter API Key", type="password")
-    cohere_api_key = st.text_input("Cohere API Key", type="password")
-    if openrouter_api_key:
-        st.session_state['openrouter_api_key'] = openrouter_api_key
-        st.success("OpenRouter API key saved successfully!")
-    if cohere_api_key:
-        st.session_state['cohere_api_key'] = cohere_api_key
-        st.success("Cohere API key saved successfully!")
-
-# Proceed only if both API keys are provided
-if st.session_state['openrouter_api_key'] and st.session_state['cohere_api_key']:
-    # Initialize OpenAI client with OpenRouter's base URL
-    openrouter_client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=st.session_state['openrouter_api_key']
-    )
-
-    # Initialize Cohere client
-    cohere_client = cohere.Client(st.session_state['cohere_api_key'])
-
-    # Initialize chat history
-    if 'auto_gpt_chat_history' not in st.session_state:
-        st.session_state['auto_gpt_chat_history'] = []
-
-    # Display chat history
-    for message in st.session_state['auto_gpt_chat_history']:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    # User input
-    if prompt := st.chat_input("Describe your inventory task..."):
-        # Append user message to chat history
-        st.session_state['auto_gpt_chat_history'].append({"role": "user", "content": prompt})
-
-        # Display user message
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Generate response from Kimi AI
-        with st.chat_message("assistant"):
-            message_placeholder = st.empty()
-            full_response = ""
-
-            try:
-                # Check if prompt length meets Cohere's minimum requirement
-                if len(prompt) >= 250:
-                    # Use Cohere to summarize the user's intent
-                    cohere_response = cohere_client.summarize(
-                        text=prompt,
-                        length='short',
-                        format='plain',
-                        model='summarize-xlarge',
-                        additional_command='Summarize the task for Kimi AI.'
+                    context = get_inventory_context(st.session_state.username)
+                    response = openrouter_client.chat.completions.create(
+                        model="moonshotai/kimi-vl-a3b-thinking:free",
+                        messages=[
+                            {"role": "system", "content": f"You are an autonomous inventory assistant. Here is the inventory context:\n\n{context}"},
+                            {"role": "user", "content": summary}
+                        ]
                     )
-                    summarized_prompt = cohere_response.summary
-                else:
-                    summarized_prompt = prompt  # Use original prompt if too short for summarization
+                    full_response = response.choices[0].message.content
+                    message_placeholder.markdown(full_response)
+                except Exception as e:
+                    message_placeholder.markdown(f"⚠️ Error: {e}")
+                    full_response = f"⚠️ Error: {e}"
 
-                # Use Kimi AI to process the summarized prompt
-                response = openrouter_client.chat.completions.create(
-                    model="moonshotai/kimi-vl-a3b-thinking:free",
-                    messages=[
-                        {"role": "system", "content": "You are an autonomous inventory management assistant."},
-                        {"role": "user", "content": summarized_prompt}
-                    ]
-                )
-                full_response = response.choices[0].message.content
-                message_placeholder.markdown(full_response)
-            except Exception as e:
-                message_placeholder.markdown(f"⚠️ An error occurred: {e}")
-                full_response = f"⚠️ An error occurred: {e}"
-
-            # Append assistant response to chat history
-            st.session_state['auto_gpt_chat_history'].append({"role": "assistant", "content": full_response})
-else:
-    st.warning("Please enter both your OpenRouter and Cohere API keys to use the AutoGPT-like assistant.")
+                st.session_state['auto_gpt_chat_history'].append({"role": "assistant", "content": full_response})
+    else:
+        st.warning("Please enter your API keys to use the assistant.")
