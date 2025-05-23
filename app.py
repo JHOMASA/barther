@@ -120,16 +120,12 @@ def show_inventory_graph(username):
     conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql_query("SELECT * FROM inventory WHERE username = ?", conn, params=(username,))
     conn.close()
-
     if df.empty:
         st.info("No inventory data available to display the graph.")
         return
-
     df['timestamp_in'] = pd.to_datetime(df['timestamp_in'], errors='coerce')
     df = df.dropna(subset=['timestamp_in'])
-
     grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq='D')])['total_stock'].max().reset_index()
-
     fig = px.bar(
         grouped,
         x='timestamp_in',
