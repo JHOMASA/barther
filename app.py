@@ -106,6 +106,7 @@ def get_inventory_context(username):
         )
     return "\n".join(context_lines)
 
+
 # ---------- INVENTORY VISUALIZATION GRAPH ----------
 def show_inventory_graph(username):
     conn = sqlite3.connect(DB_NAME)
@@ -160,18 +161,37 @@ def show_sql_explorer(username):
             st.error(f"❌ SQL Error: {e}")
         finally:
             conn.close()
-# ---------- MISTRAL + KIMI REASONING LOOP ----------
-def run_reasoning_loop(user_goal, inventory_context, openrouter_client):
+            
+# ---------- USER MODEL CHOICE ----------
+def select_model():
+    model_choice = st.radio("Choose Reasoning Model:", ["Mistral 7B", "Cohere Command R+"], index=0)
+    return model_choice
+    
+# ---------- AUTO REASONING LOOP ----------
+def run_reasoning_loop(user_goal, inventory_context, openrouter_client, model_choice):
     loop_history = []
-    mistral_response = openrouter_client.chat.completions.create(
-        model="mistralai/mistral-7b-instruct:free",
-        messages=[
-            {"role": "system", "content": "Break down user goals into actionable inventory steps."},
-            {"role": "user", "content": f"Goal: {user_goal}"}
-        ]
-    )
-    steps = mistral_response.choices[0].message.content.strip().split("\n")
-    steps = [step for step in steps if step.strip() and step[0].isdigit()]
+
+    if model_choice == "Cohere Command R+":
+        cohere_client = cohere.Client(st.session_state['cohere_api_key'])
+        plan = cohere_client.generate(
+            model='command',
+            prompt=f"Break down this goal into step-by-step reasoning tasks.\n\nGoal: {user_goal}",
+            max_tokens=150,
+            temperature=0.5
+        )
+        steps = plan.generations[0].text.strip().split("\n")
+        steps = [s for s in steps if s.strip() and s[0].isdigit()]
+    else:
+        mistral_response = openrouter_client.chat.completions.create(
+            model="mistralai/mistral-7b-instruct:free",
+            messages=[
+                {"role": "system", "content": "Break down user goals into actionable inventory steps."},
+                {"role": "user", "content": f"Goal: {user_goal}"}
+            ]
+        )
+        steps = mistral_response.choices[0].message.content.strip().split("\n")
+        steps = [s for s in steps if s.strip() and s[0].isdigit()]
+
     for step in steps:
         current_step = step.split(".", 1)[-1].strip()
         kimi_response = openrouter_client.chat.completions.create(
