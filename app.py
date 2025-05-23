@@ -78,6 +78,8 @@ def load_inventory(username):
     conn.close()
     return df
 
+st.set_page_config(page_title="📦 Inventory Tracker", layout="wide")
+
 def get_inventory_context(username):
     import sqlite3
     import pandas as pd
