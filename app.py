@@ -106,7 +106,15 @@ def get_inventory_context(username):
         )
     return "\n".join(context_lines)
 
-
+# ---------- GRAPH VISUALIZATION ----------
+def visualize_reasoning_with_graph4nlp(steps):
+    dot = Digraph()
+    dot.attr(rankdir='LR')
+    for i, step in enumerate(steps):
+        dot.node(f"{i+1}", step['step'])
+        if i > 0:
+            dot.edge(f"{i}", f"{i+1}")
+    return dot
 # ---------- INVENTORY VISUALIZATION GRAPH ----------
 def show_inventory_graph(username):
     conn = sqlite3.connect(DB_NAME)
@@ -168,10 +176,14 @@ def select_model():
     return model_choice
     
 # ---------- AUTO REASONING LOOP ----------
+# ---------- AUTO REASONING LOOP ----------
 def run_reasoning_loop(user_goal, inventory_context, openrouter_client, model_choice):
     loop_history = []
 
     if model_choice == "Cohere Command R+":
+        if not st.session_state.get('cohere_api_key'):
+            st.warning("Cohere API key required for this model.")
+            return []
         cohere_client = cohere.Client(st.session_state['cohere_api_key'])
         plan = cohere_client.generate(
             model='command',
@@ -182,6 +194,9 @@ def run_reasoning_loop(user_goal, inventory_context, openrouter_client, model_ch
         steps = plan.generations[0].text.strip().split("\n")
         steps = [s for s in steps if s.strip() and s[0].isdigit()]
     else:
+        if not st.session_state.get('openrouter_api_key'):
+            st.warning("OpenRouter API key required for Mistral 7B.")
+            return []
         mistral_response = openrouter_client.chat.completions.create(
             model="mistralai/mistral-7b-instruct:free",
             messages=[
@@ -204,6 +219,7 @@ def run_reasoning_loop(user_goal, inventory_context, openrouter_client, model_ch
         result = kimi_response.choices[0].message.content
         loop_history.append({"step": current_step, "result": result})
     return loop_history
+
 
 
 # ---------- GRAPH4NLP SIMULATION ----------
