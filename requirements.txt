@@ -7,5 +7,5 @@ torch==2.2.2
 transformers==4.40.1 
 cohere==5.15.0
 openai==1.81.0
-graphviz == 0.20.3
-network == 3.3
+graphviz==0.20.3
+network==3.3
