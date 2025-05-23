@@ -454,14 +454,23 @@ else:
         st.session_state['cohere_api_key'] = ''
 
     with st.expander("🔐 Enter Your API Keys"):
-        openrouter_api_key = st.text_input("OpenRouter API Key", type="password")
+     model_choice = select_model()  # This must be called early
+
+     openrouter_api_key = st.text_input("OpenRouter API Key", type="password")
+     if openrouter_api_key:
+        st.session_state['openrouter_api_key'] = openrouter_api_key
+        st.success("✅ OpenRouter API key saved!")
+
+     if model_choice == "Cohere Command R+":
         cohere_api_key = st.text_input("Cohere API Key", type="password")
-        if openrouter_api_key:
-            st.session_state['openrouter_api_key'] = openrouter_api_key
-            st.success("OpenRouter API key saved successfully!")
         if cohere_api_key:
             st.session_state['cohere_api_key'] = cohere_api_key
-            st.success("Cohere API key saved successfully!")
+            st.success("✅ Cohere API key saved!")
+    # Warn only if needed
+    if model_choice == "Mistral 7B" and not st.session_state.get("openrouter_api_key"):
+        st.warning("Please enter your OpenRouter API key to use Mistral.")
+    elif model_choice == "Cohere Command R+" and not st.session_state.get("cohere_api_key"):
+        st.warning("Please enter your Cohere API key to use Command R+.")
 
     if st.session_state['openrouter_api_key'] and st.session_state['cohere_api_key']:
         openrouter_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=st.session_state['openrouter_api_key'])
