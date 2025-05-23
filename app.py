@@ -79,11 +79,16 @@ def load_inventory(username):
     return df
 
 def get_inventory_context(username):
+    import sqlite3
+    import pandas as pd
+
     conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql_query("SELECT * FROM inventory WHERE username = ?", conn, params=(username,))
     conn.close()
+
     if df.empty:
         return "There is no inventory data for this user."
+
     df['expiration_date'] = pd.to_datetime(df['expiration_date'], errors='coerce').dt.date
     summary = df.groupby('product_name').agg({
         'stock_in': 'sum',
@@ -91,6 +96,7 @@ def get_inventory_context(username):
         'total_stock': 'last',
         'expiration_date': 'last'
     }).reset_index()
+
     context_lines = []
     for _, row in summary.iterrows():
         context_lines.append(
@@ -99,6 +105,144 @@ def get_inventory_context(username):
             f"Last Expiry: {row['expiration_date']}"
         )
     return "\n".join(context_lines)
+
+# ---------- MINI AUTOGPT LOOP FUNCTION ----------
+def run_reasoning_loop(user_goal, inventory_context, cohere_client, openrouter_client):
+    loop_history = []
+
+    # Step 1: Use Cohere to break down the task
+    task_plan = cohere_client.generate(
+        model='command',
+        prompt=f"Break down this goal into step-by-step reasoning tasks.\n\nGoal: {user_goal}",
+        max_tokens=150,
+        temperature=0.5
+    )
+    steps = task_plan.generations[0].text.strip().split("\n")
+    steps = [step for step in steps if step.strip() and step[0].isdigit()]  # Keep only numbered steps
+
+    for step in steps:
+        current_step = step.split(".", 1)[-1].strip()
+
+        # Step 2: Execute with Kimi
+        response = openrouter_client.chat.completions.create(
+            model="moonshotai/kimi-vl-a3b-thinking:free",
+            messages=[
+                {"role": "system", "content": f"You are an inventory reasoning assistant. Here is the inventory data:\n\n{inventory_context}"},
+                {"role": "user", "content": f"Your current task is: {current_step}. Execute it and provide the result."}
+            ]
+        )
+        result = response.choices[0].message.content if response and hasattr(response, "choices") and response.choices else "No result."
+
+        loop_history.append({"step": current_step, "result": result})
+
+        # Step 3: Reflection
+        reflection_prompt = f"""
+        You just completed the step: {current_step}.
+        Result: {result}
+        Should we continue to the next step? If yes, say NEXT. If done, say DONE.
+        """
+        reflection = cohere_client.generate(
+            model='command',
+            prompt=reflection_prompt,
+            max_tokens=30
+        ).generations[0].text.strip().upper()
+
+        if "DONE" in reflection:
+            break
+
+    return loop_history
+# ---------- EMAIL SENDING FUNCTION ----------
+def send_email_with_attachment(to_address, subject, body, attachment_name, attachment_data):
+    import smtplib
+    from email.message import EmailMessage
+
+    sender_email = "your_email@example.com"
+    sender_password = "your_email_password"
+
+    msg = EmailMessage()
+    msg['Subject'] = subject
+    msg['From'] = sender_email
+    msg['To'] = to_address
+    msg.set_content(body)
+
+    msg.add_attachment(attachment_data, maintype='application', subtype='octet-stream', filename=attachment_name)
+
+    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+        smtp.login(sender_email, sender_password)
+        smtp.send_message(msg)
+
+# ---------- CHAT ENTRY POINT ----------
+if 'username' in st.session_state:
+    inventory_context = get_inventory_context(st.session_state.username)
+    with st.expander("\U0001F4E6 Current Inventory Context", expanded=False):
+        st.markdown(inventory_context)
+
+    if st.session_state.get('openrouter_api_key') and st.session_state.get('cohere_api_key'):
+        openrouter_client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=st.session_state['openrouter_api_key']
+        )
+        cohere_client = cohere.Client(st.session_state['cohere_api_key'])
+
+        st.subheader("🌀 Small-Scale AutoGPT Inventory Loop")
+        user_goal = st.text_input("What inventory task should I solve?")
+
+        # Email and permission entry
+        st.markdown("#### 🔐 Export & Access Control")
+        email_address = st.text_input("Enter recipient email")
+        permission_level = st.selectbox("Select access level", ["admin", "owner", "reviewer"])
+
+        if st.button("🔁 Run Reasoning Loop") and user_goal:
+            with st.spinner("Running reasoning loop..."):
+                loop_results = run_reasoning_loop(user_goal, inventory_context, cohere_client, openrouter_client)
+
+            if 'reasoning_logs' not in st.session_state:
+                st.session_state['reasoning_logs'] = []
+            st.session_state['reasoning_logs'].append({"goal": user_goal, "results": loop_results, "email": email_address, "access": permission_level})
+
+            st.success("✅ Loop completed")
+            for i, step in enumerate(loop_results):
+                st.markdown(f"**Step {i+1}: {step['step']}**")
+                st.markdown(f"Result: {step['result']}")
+
+            import io
+            import pandas as pd
+            from datetime import datetime
+
+            export_df = pd.DataFrame(loop_results)
+            csv = export_df.to_csv(index=False).encode('utf-8')
+            json_data = export_df.to_json(orient='records', indent=2).encode('utf-8')
+
+            st.download_button("⬇ Download as CSV", csv, f"reasoning_loop_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", "text/csv")
+            st.download_button("⬇ Download as JSON", json_data, f"reasoning_loop_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json", "application/json")
+
+            st.info(f"Access to this report is limited to: **{permission_level}** at {email_address}")
+
+            if st.checkbox("📧 Send this report to the email above"):
+                try:
+                    send_email_with_attachment(
+                        to_address=email_address,
+                        subject="Inventory Reasoning Report",
+                        body=f"Attached is the report for: {user_goal}\nAccess Level: {permission_level}",
+                        attachment_name="reasoning_loop.csv",
+                        attachment_data=csv
+                    )
+                    st.success(f"📬 Email sent to {email_address}")
+                except Exception as e:
+                    st.error(f"❌ Failed to send email: {e}")
+
+        if st.session_state.get('reasoning_logs'):
+            st.subheader("🧾 Previous Reasoning Loops")
+            for log in st.session_state['reasoning_logs']:
+                st.markdown(f"### Goal: {log['goal']}")
+                st.markdown(f"**Shared with:** {log['email']} ({log['access']})")
+                for i, step in enumerate(log['results']):
+                    st.markdown(f"- **Step {i+1}**: {step['step']}")
+                    st.markdown(f"  ➤ {step['result']}")
+else:
+    inventory_context = "No user logged in yet."
+    with st.expander("\U0001F4E6 Current Inventory Context", expanded=False):
+        st.markdown(inventory_context)
 
 # ---------- APP ----------
 create_tables()
