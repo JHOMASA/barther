@@ -160,6 +160,31 @@ def show_sql_explorer(username):
             st.error(f"❌ SQL Error: {e}")
         finally:
             conn.close()
+# ---------- MISTRAL + KIMI REASONING LOOP ----------
+def run_reasoning_loop(user_goal, inventory_context, openrouter_client):
+    loop_history = []
+    mistral_response = openrouter_client.chat.completions.create(
+        model="mistralai/mistral-7b-instruct:free",
+        messages=[
+            {"role": "system", "content": "Break down user goals into actionable inventory steps."},
+            {"role": "user", "content": f"Goal: {user_goal}"}
+        ]
+    )
+    steps = mistral_response.choices[0].message.content.strip().split("\n")
+    steps = [step for step in steps if step.strip() and step[0].isdigit()]
+    for step in steps:
+        current_step = step.split(".", 1)[-1].strip()
+        kimi_response = openrouter_client.chat.completions.create(
+            model="moonshotai/kimi-vl-a3b-thinking:free",
+            messages=[
+                {"role": "system", "content": f"You are an inventory reasoning assistant. Here is the inventory data:\n\n{inventory_context}"},
+                {"role": "user", "content": f"Your current task is: {current_step}. Execute it and provide the result."}
+            ]
+        )
+        result = kimi_response.choices[0].message.content
+        loop_history.append({"step": current_step, "result": result})
+    return loop_history
+
 
 # ---------- GRAPH4NLP SIMULATION ----------
 def visualize_reasoning_with_graph4nlp(steps):
