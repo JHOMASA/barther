@@ -166,11 +166,6 @@ def show_sql_explorer(username):
 # ---------- USER MODEL CHOICE ----------
 def select_model():
     return st.radio("Choose Reasoning Model:", ["Mistral 7B", "Cohere Command R+"], index=0, key="unique_model_choice")
-            
-# ---------- USER MODEL CHOICE ----------
-def select_model():
-    return st.radio("Choose Reasoning Model:", ["Mistral 7B", "Cohere Command R+"], index=0, key="model_choice")
-
     
 # ---------- AUTO REASONING LOOP ----------
 # ---------- AUTO REASONING LOOP ----------
