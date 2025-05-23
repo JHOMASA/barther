@@ -172,8 +172,7 @@ def show_sql_explorer(username):
             
 # ---------- USER MODEL CHOICE ----------
 def select_model():
-    model_choice = st.radio("Choose Reasoning Model:", ["Mistral 7B", "Cohere Command R+"], index=0)
-    return model_choice
+    return st.radio("Choose Reasoning Model:", ["Mistral 7B", "Cohere Command R+"], index=0)
     
 # ---------- AUTO REASONING LOOP ----------
 # ---------- AUTO REASONING LOOP ----------
@@ -219,6 +218,7 @@ def run_reasoning_loop(user_goal, inventory_context, openrouter_client, model_ch
         result = kimi_response.choices[0].message.content
         loop_history.append({"step": current_step, "result": result})
     return loop_history
+
 
 
 
@@ -472,7 +472,8 @@ else:
     elif model_choice == "Cohere Command R+" and not st.session_state.get("cohere_api_key"):
         st.warning("Please enter your Cohere API key to use Command R+.")
 
-    if st.session_state['openrouter_api_key'] and st.session_state['cohere_api_key']:
+    model_choice = select_model()
+    if((model_choice == "Mistral 7B" and st.session_state.get('openrouter_api_key')) or(model_choice == "Cohere Command R+" and st.session_state.get('cohere_api_key'))):
         openrouter_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=st.session_state['openrouter_api_key'])
         cohere_client = cohere.Client(st.session_state['cohere_api_key'])
 
