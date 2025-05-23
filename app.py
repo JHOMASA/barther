@@ -172,7 +172,8 @@ def show_sql_explorer(username):
             
 # ---------- USER MODEL CHOICE ----------
 def select_model():
-    return st.radio("Choose Reasoning Model:", ["Mistral 7B", "Cohere Command R+"], index=0)
+    return st.radio("Choose Reasoning Model:", ["Mistral 7B", "Cohere Command R+"], index=0, key="model_choice")
+
     
 # ---------- AUTO REASONING LOOP ----------
 # ---------- AUTO REASONING LOOP ----------
@@ -218,7 +219,6 @@ def run_reasoning_loop(user_goal, inventory_context, openrouter_client, model_ch
         result = kimi_response.choices[0].message.content
         loop_history.append({"step": current_step, "result": result})
     return loop_history
-
 
 
 
