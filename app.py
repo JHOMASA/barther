@@ -1,4 +1,5 @@
 import streamlit as st
+st.set_page_config("📦 Inventory Tracker", layout="wide")
 import pandas as pd
 import sqlite3
 import openai
@@ -248,7 +249,6 @@ else:
 
 # ---------- APP ----------
 create_tables()
-st.set_page_config("📦 Inventory Tracker", layout="wide")
 st.title("📦 Inventory Management System - Lima Time")
 
 if 'logged_in' not in st.session_state:
