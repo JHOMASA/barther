@@ -15,6 +15,7 @@ import plotly.express as px
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from openai import OpenAI
+from graphviz import Digraph
 
 # ---------- CONFIGURATION ----------
 DB_NAME = "inventory.db"
