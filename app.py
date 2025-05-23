@@ -26,12 +26,15 @@ lima_tz = pytz.timezone("America/Lima")
 def create_tables():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute(\"\"\"
+    
+    c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         username TEXT PRIMARY KEY,
         password TEXT NOT NULL
-    )\"\"\")
-    c.execute(\"\"\"
+    )
+    """)
+
+    c.execute("""
     CREATE TABLE IF NOT EXISTS inventory (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp_in TEXT,
@@ -47,7 +50,9 @@ def create_tables():
         total_units INTEGER,
         expiration_date TEXT,
         username TEXT
-    )\"\"\")
+    )
+    """)
+    
     conn.commit()
     conn.close()
 
