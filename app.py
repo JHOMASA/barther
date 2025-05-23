@@ -50,6 +50,7 @@ def create_tables():
     conn.commit()
     conn.close()
 
+# ---------- HASHING AND AUTH ----------
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -68,6 +69,7 @@ def add_user(username, password):
     conn.commit()
     conn.close()
 
+# ---------- INVENTORY ----------
 def insert_inventory(data):
     conn = sqlite3.connect(DB_NAME)
     df = pd.DataFrame([data])
@@ -80,15 +82,12 @@ def load_inventory(username):
     conn.close()
     return df
 
-# ---------- INVENTORY CONTEXT FUNCTION ----------
 def get_inventory_context(username):
     conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql_query("SELECT * FROM inventory WHERE username = ?", conn, params=(username,))
     conn.close()
-
     if df.empty:
         return "There is no inventory data for this user."
-
     df['expiration_date'] = pd.to_datetime(df['expiration_date'], errors='coerce').dt.date
     summary = df.groupby('product_name').agg({
         'stock_in': 'sum',
@@ -96,7 +95,6 @@ def get_inventory_context(username):
         'total_stock': 'last',
         'expiration_date': 'last'
     }).reset_index()
-
     context_lines = []
     for _, row in summary.iterrows():
         context_lines.append(
@@ -115,7 +113,8 @@ def visualize_reasoning_with_graph4nlp(steps):
         if i > 0:
             dot.edge(f"{i}", f"{i+1}")
     return dot
-# ---------- INVENTORY VISUALIZATION GRAPH ----------
+
+# ---------- INVENTORY GRAPH ----------
 def show_inventory_graph(username):
     conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql_query("SELECT * FROM inventory WHERE username = ?", conn, params=(username,))
@@ -147,15 +146,13 @@ def show_inventory_graph(username):
     )
     st.plotly_chart(fig, use_container_width=True)
 
-# ---------- SQL EXPLORER SECTION ----------
+# ---------- SQL EXPLORER ----------
 def show_sql_explorer(username):
     st.subheader("🧠 SQL Explorer")
     st.markdown("You can write SQL queries below using the `inventory` table. Example:")
     st.code(f"SELECT product_name, SUM(total_stock) as total_stock FROM inventory WHERE username = '{username}' GROUP BY product_name", language="sql")
-
-    query_input = st.text_area("Write your SQL query:")
-
-    if st.button("▶ Run SQL Query"):
+    query_input = st.text_area("Write your SQL query:", key="sql_query")
+    if st.button("▶ Run SQL Query", key="run_sql"):
         conn = sqlite3.connect(DB_NAME)
         try:
             df_query = pd.read_sql_query(query_input, conn)
@@ -165,6 +162,10 @@ def show_sql_explorer(username):
             st.error(f"❌ SQL Error: {e}")
         finally:
             conn.close()
+
+# ---------- USER MODEL CHOICE ----------
+def select_model():
+    return st.radio("Choose Reasoning Model:", ["Mistral 7B", "Cohere Command R+"], index=0, key="unique_model_choice")
             
 # ---------- USER MODEL CHOICE ----------
 def select_model():
