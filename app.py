@@ -50,7 +50,30 @@ def create_tables():
     conn.commit()
     conn.close()
 
-# ---------- HASHING AND AUTH ----------
+create_tables()
+
+# ---------- USER MODEL CHOICE (SINGLE INSTANCE) ----------
+model_choice = st.radio("Choose Reasoning Model:", ["Mistral 7B", "Cohere Command R+"], index=0, key="model_choice")
+
+# ---------- API KEY INPUT ----------
+with st.expander("🔐 Enter Your API Keys"):
+    openrouter_api_key = st.text_input("OpenRouter API Key", type="password")
+    if openrouter_api_key:
+        st.session_state['openrouter_api_key'] = openrouter_api_key
+        st.success("✅ OpenRouter API key saved!")
+
+    if model_choice == "Cohere Command R+":
+        cohere_api_key = st.text_input("Cohere API Key", type="password")
+        if cohere_api_key:
+            st.session_state['cohere_api_key'] = cohere_api_key
+            st.success("✅ Cohere API key saved!")
+
+if model_choice == "Mistral 7B" and not st.session_state.get("openrouter_api_key"):
+    st.warning("Please enter your OpenRouter API key to use Mistral.")
+elif model_choice == "Cohere Command R+" and not st.session_state.get("cohere_api_key"):
+    st.warning("Please enter your Cohere API key to use Command R+.")
+
+# ---------- USER AUTHENTICATION ----------
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -68,6 +91,36 @@ def add_user(username, password):
     c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hash_password(password)))
     conn.commit()
     conn.close()
+
+# ---------- AUTH INTERFACE ----------
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+    tab1, tab2 = st.tabs(["🔑 Login", "🆕 Register"])
+    with tab1:
+        st.subheader("Login")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            if validate_login(username, password):
+                st.session_state.logged_in = True
+                st.session_state.username = username
+                st.success(f"✅ Welcome, {username}!")
+                st.experimental_rerun()
+            else:
+                st.error("❌ Invalid credentials")
+    with tab2:
+        st.subheader("Register")
+        new_user = st.text_input("New Username")
+        new_pass = st.text_input("New Password", type="password")
+        if st.button("Register"):
+            add_user(new_user, new_pass)
+            st.success("✅ Account created! You can now login.")
+
+# ---------- PLACEHOLDER FOR LOGGED-IN FUNCTIONALITY ----------
+if st.session_state.get('logged_in'):
+    st.success(f"Logged in as: {st.session_state.username}")
 
 # ---------- INVENTORY ----------
 def insert_inventory(data):
@@ -444,7 +497,8 @@ else:
         st.session_state['openrouter_api_key'] = ''
     if 'cohere_api_key' not in st.session_state:
         st.session_state['cohere_api_key'] = ''
-
+    # ---------- USER MODEL CHOICE (SINGLE INSTANCE) ----------
+    model_choice = st.radio("Choose Reasoning Model:", ["Mistral 7B", "Cohere Command R+"], index=0, key="model_choice")
     with st.expander("🔐 Enter Your API Keys"):
      model_choice = select_model()  # This must be called early
 
