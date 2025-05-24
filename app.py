@@ -16,6 +16,8 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from openai import OpenAI
 from graphviz import Digraph
+
+st.set_page_config("📦 Inventory Tracker", layout="wide")
 # ---------- CONFIGURATION ----------
 DB_NAME = "inventory.db"
 lima_tz = pytz.timezone("America/Lima")
@@ -92,8 +94,6 @@ def load_local_model():
 
 # ---------- MAIN APP ----------
 create_tables()
-st.set_page_config("📦 Inventory Tracker", layout="wide")
-st.title("📦 Inventory Management System - Lima Time")
 
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
