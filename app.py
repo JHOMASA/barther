@@ -83,67 +83,6 @@ def load_inventory(username):
     conn.close()
     return df
 
-# ---------- NATURAL LANGUAGE TO SQL ----------
-def generate_sql_query(user_question, username):
-    schema = """
-    Table: inventory
-    Columns:
-      - id (INTEGER)
-      - timestamp_in (TEXT)
-      - timestamp_out (TEXT)
-      - product_name (TEXT)
-      - batch_id (TEXT)
-      - stock_in (INTEGER)
-      - stock_out (INTEGER)
-      - total_stock (INTEGER)
-      - unit_price (REAL)
-      - quantity (INTEGER)
-      - total_price (REAL)
-      - total_units (INTEGER)
-      - expiration_date (TEXT)
-      - username (TEXT)
-    """
-    prompt = f"""
-    You are a SQL assistant. Translate the following user input into a valid SQL query for a SQLite database.
-
-    {schema}
-
-    Always include a WHERE clause filtering by username = '{username}'.
-    If the input is already SQL, keep it as is but ensure it includes WHERE username = '{username}'.
-
-    Input: {user_question}
-
-    SQL:
-    """
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
-        max_tokens=150,
-        temperature=0
-    )
-    sql_query = response.choices[0].text.strip()
-    return sql_query
-
-def execute_sql_query(sql_query):
-    conn = sqlite3.connect(DB_NAME)
-    try:
-        df = pd.read_sql_query(sql_query, conn)
-    except Exception as e:
-        df = pd.DataFrame()
-    conn.close()
-    return df
-
-def generate_response(user_question, query_results):
-    context = query_results.to_string(index=False)
-    prompt = f"Based on the following data:\n{context}\n\nAnswer the question: {user_question}"
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
-        max_tokens=150,
-        temperature=0
-    )
-    answer = response.choices[0].text.strip()
-    return answer
 # ---------- LOCAL LLM SETUP ----------
 @st.cache_resource
 def load_local_model():
@@ -308,66 +247,6 @@ else:
         except Exception as e:
             st.error(f"⚠️ SQL Error: {e}")
     conn.close()
-def generate_sql_query(user_question):
-    schema = """
-    Table: inventory
-    Columns:
-      - id (INTEGER)
-      - timestamp_in (TEXT)
-      - timestamp_out (TEXT)
-      - product_name (TEXT)
-      - batch_id (TEXT)
-      - stock_in (INTEGER)
-      - stock_out (INTEGER)
-      - total_stock (INTEGER)
-      - unit_price (REAL)
-      - quantity (INTEGER)
-      - total_price (REAL)
-      - total_units (INTEGER)
-      - expiration_date (TEXT)
-      - username (TEXT)
-    """
-    prompt = f"""
-    You are a SQL assistant. Translate the following user input into a valid SQL query for a SQLite database.
-
-    {schema}
-
-    If the input is already SQL, keep it as is.
-
-    Input: {user_question}
-
-    SQL:
-    """
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
-        max_tokens=150,
-        temperature=0
-    )
-    sql_query = response.choices[0].text.strip()
-    return sql_query
-
-def execute_sql_query(sql_query):
-    conn = sqlite3.connect(DB_NAME)
-    try:
-        df = pd.read_sql_query(sql_query, conn)
-    except Exception as e:
-        df = pd.DataFrame()
-    conn.close()
-    return df
-
-def generate_response(user_question, query_results):
-    context = query_results.to_string(index=False)
-    prompt = f"Based on the following data:\n{context}\n\nAnswer the question: {user_question}"
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
-        max_tokens=150,
-        temperature=0
-    )
-    answer = response.choices[0].text.strip()
-    return answer
-
 
     # ---------- CHATBOT ----------
 
