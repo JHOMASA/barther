@@ -181,7 +181,6 @@ else:
         expired = df[df['expiration_date'] < datetime.now()]
         expiring_soon = df[(df['expiration_date'] >= datetime.now()) &
                            (df['expiration_date'] <= datetime.now() + timedelta(days=7))]
-
         if not expired.empty:
             st.warning("⚠️ Some products have **expired**:")
             st.dataframe(expired[["product_name", "batch_id", "expiration_date"]])
