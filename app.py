@@ -262,9 +262,6 @@ def show_sql_explorer(username):
         finally:
             conn.close()
 
-# ---------- USER MODEL CHOICE ----------
-def select_model():
-    return st.radio("Choose Reasoning Model:", ["Mistral 7B", "Cohere Command R+"], index=0, key="unique_model_choice")
     
 # ---------- AUTO REASONING LOOP ----------
 # ---------- AUTO REASONING LOOP ----------
