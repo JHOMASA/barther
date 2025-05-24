@@ -16,24 +16,19 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from openai import OpenAI
 from graphviz import Digraph
-
 # ---------- CONFIGURATION ----------
 DB_NAME = "inventory.db"
 lima_tz = pytz.timezone("America/Lima")
-
 
 # ---------- DATABASE SETUP ----------
 def create_tables():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         username TEXT PRIMARY KEY,
         password TEXT NOT NULL
-    )
-    """)
-
+    )""")
     c.execute("""
     CREATE TABLE IF NOT EXISTS inventory (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,15 +45,10 @@ def create_tables():
         total_units INTEGER,
         expiration_date TEXT,
         username TEXT
-    )
-    """)
-    
+    )""")
     conn.commit()
     conn.close()
 
-create_tables()
-
-# ---------- AUTHENTICATION ----------
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -77,116 +67,27 @@ def add_user(username, password):
     conn.commit()
     conn.close()
 
-# ---------- MODEL SELECTION ----------
-def select_model():
-    return st.radio("Choose Reasoning Model:", ["Mistral 7B", "Cohere Command R+"], index=0, key="model_choice_unique")
+def insert_inventory(data):
+    conn = sqlite3.connect(DB_NAME)
+    df = pd.DataFrame([data])
+    df.to_sql("inventory", conn, if_exists="append", index=False)
+    conn.close()
 
-model_choice = select_model()
+def load_inventory(username):
+    conn = sqlite3.connect(DB_NAME)
+    df = pd.read_sql("SELECT * FROM inventory WHERE username = ?", conn, params=(username,))
+    conn.close()
+    return df
 
-with st.expander("🔐 Enter Your API Keys"):
-    if model_choice == "Mistral 7B":
-        openrouter_api_key = st.text_input("OpenRouter API Key", type="password", key="openrouter_key")
-        if openrouter_api_key:
-            st.session_state['openrouter_api_key'] = openrouter_api_key
-            st.success("✅ OpenRouter API key saved!")
-    elif model_choice == "Cohere Command R+":
-        cohere_api_key = st.text_input("Cohere API Key", type="password", key="cohere_key")
-        if cohere_api_key:
-            st.session_state['cohere_api_key'] = cohere_api_key
-            st.success("✅ Cohere API key saved!")
-
-if model_choice == "Mistral 7B" and not st.session_state.get("openrouter_api_key"):
-    st.warning("⚠️ Please enter your OpenRouter API key to use Mistral.")
-elif model_choice == "Cohere Command R+" and not st.session_state.get("cohere_api_key"):
-    st.warning("⚠️ Please enter your Cohere API key to use Command R+.")
-
-# ---------- LOGIN SYSTEM ----------
-st.title("📦 Inventory Management System - Lima Time")
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-
-if not st.session_state.logged_in:
-    tab1, tab2 = st.tabs(["🔑 Login", "🆕 Register"])
-    with tab1:
-        st.subheader("Login")
-        username = st.text_input("Username", key="login_user")
-        password = st.text_input("Password", type="password", key="login_pass")
-        if st.button("Login", key="login_btn"):
-            if validate_login(username, password):
-                st.session_state.logged_in = True
-                st.session_state.username = username
-                st.experimental_rerun()
-            else:
-                st.error("❌ Invalid credentials")
-    with tab2:
-        st.subheader("Register")
-        new_user = st.text_input("New Username", key="reg_user")
-        new_pass = st.text_input("New Password", type="password", key="reg_pass")
-        if st.button("Register", key="register_btn"):
-            add_user(new_user, new_pass)
-            st.success("✅ Account created! You can now login.")
-else:
-    st.sidebar.success(f"Logged in as: {st.session_state.username}")
-
-    def insert_inventory(data):
-        conn = sqlite3.connect(DB_NAME)
-        df = pd.DataFrame([data])
-        df.to_sql("inventory", conn, if_exists="append", index=False)
-        conn.close()
-
-    def load_inventory(username):
-        conn = sqlite3.connect(DB_NAME)
-        df = pd.read_sql("SELECT * FROM inventory WHERE username = ?", conn, params=(username,))
-        conn.close()
-        return df
-
-    st.subheader("➕ Add Inventory Movement")
-    with st.form("add_form"):
-        product_name = st.text_input("Product Name", key="prod_name")
-        batch_id = st.text_input("Batch ID", key="batch_id")
-        stock_in = st.number_input("Stock In", min_value=0, value=0, key="stock_in")
-        stock_out = st.number_input("Stock Out", min_value=0, value=0, key="stock_out")
-        unit_price = st.number_input("Unit Price", min_value=0.0, format="%.2f", key="unit_price")
-        quantity = st.number_input("Quantity", min_value=1, value=1, key="quantity")
-        requires_expiration = st.radio("Does this product require an expiration date?", ("Yes", "No"), key="require_exp")
-        expiration_date = st.date_input("Expiration Date", key="exp_date") if requires_expiration == "Yes" else None
-        submitted = st.form_submit_button("✅ Record Entry", key="submit_inv")
-        if submitted:
-            now = datetime.now(lima_tz)
-            df = load_inventory(st.session_state.username)
-            prev_stock = df[df["product_name"] == product_name]["total_stock"].iloc[-1] if product_name in df["product_name"].values else 0
-            total_units = stock_in - stock_out
-            new_stock = prev_stock + total_units
-            total_price = unit_price * quantity
-            data = {
-                "timestamp_in": now.strftime("%Y-%m-%d %H:%M:%S") if stock_in > 0 else None,
-                "timestamp_out": now.strftime("%Y-%m-%d %H:%M:%S") if stock_out > 0 else None,
-                "product_name": product_name,
-                "batch_id": batch_id,
-                "stock_in": stock_in,
-                "stock_out": stock_out,
-                "total_stock": new_stock,
-                "unit_price": unit_price,
-                "quantity": quantity,
-                "total_price": total_price,
-                "total_units": total_units,
-                "expiration_date": expiration_date.strftime("%Y-%m-%d") if expiration_date else None,
-                "username": st.session_state.username
-            }
-            insert_inventory(data)
-            st.success(f"📦 Entry for **{product_name}** saved.")
-            st.experimental_rerun()
-
-    df = load_inventory(st.session_state.username)
-    st.subheader("📊 Inventory Log")
-    st.dataframe(df, use_container_width=True)
-    
+# ---------- INVENTORY CONTEXT FUNCTION ----------
 def get_inventory_context(username):
     conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql_query("SELECT * FROM inventory WHERE username = ?", conn, params=(username,))
     conn.close()
+
     if df.empty:
         return "There is no inventory data for this user."
+
     df['expiration_date'] = pd.to_datetime(df['expiration_date'], errors='coerce').dt.date
     summary = df.groupby('product_name').agg({
         'stock_in': 'sum',
@@ -194,6 +95,7 @@ def get_inventory_context(username):
         'total_stock': 'last',
         'expiration_date': 'last'
     }).reset_index()
+
     context_lines = []
     for _, row in summary.iterrows():
         context_lines.append(
@@ -212,18 +114,21 @@ def visualize_reasoning_with_graph4nlp(steps):
         if i > 0:
             dot.edge(f"{i}", f"{i+1}")
     return dot
-
-# ---------- INVENTORY GRAPH ----------
+# ---------- INVENTORY VISUALIZATION GRAPH ----------
 def show_inventory_graph(username):
     conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql_query("SELECT * FROM inventory WHERE username = ?", conn, params=(username,))
     conn.close()
+
     if df.empty:
         st.info("No inventory data available to display the graph.")
         return
+
     df['timestamp_in'] = pd.to_datetime(df['timestamp_in'], errors='coerce')
     df = df.dropna(subset=['timestamp_in'])
+
     grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq='D')])['total_stock'].max().reset_index()
+
     fig = px.bar(
         grouped,
         x='timestamp_in',
@@ -245,13 +150,15 @@ def show_inventory_graph(username):
     )
     st.plotly_chart(fig, use_container_width=True)
 
-# ---------- SQL EXPLORER ----------
+# ---------- SQL EXPLORER SECTION ----------
 def show_sql_explorer(username):
     st.subheader("🧠 SQL Explorer")
     st.markdown("You can write SQL queries below using the `inventory` table. Example:")
     st.code(f"SELECT product_name, SUM(total_stock) as total_stock FROM inventory WHERE username = '{username}' GROUP BY product_name", language="sql")
-    query_input = st.text_area("Write your SQL query:", key="sql_query")
-    if st.button("▶ Run SQL Query", key="run_sql"):
+
+    query_input = st.text_area("Write your SQL query:")
+
+    if st.button("▶ Run SQL Query"):
         conn = sqlite3.connect(DB_NAME)
         try:
             df_query = pd.read_sql_query(query_input, conn)
@@ -261,6 +168,10 @@ def show_sql_explorer(username):
             st.error(f"❌ SQL Error: {e}")
         finally:
             conn.close()
+            
+# ---------- USER MODEL CHOICE ----------
+def select_model():
+    return st.radio("Choose Reasoning Model:", ["Mistral 7B", "Cohere Command R+"], index=0, key="model_choice")
 
     
 # ---------- AUTO REASONING LOOP ----------
@@ -457,6 +368,82 @@ else:
     with st.expander("📦 Current Inventory Context", expanded=False):
         st.markdown(inventory_context)
 
+# ---------- APP ----------
+create_tables()
+st.title("📦 Inventory Management System - Lima Time")
+
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+    tab1, tab2 = st.tabs(["🔑 Login", "🆕 Register"])
+    with tab1:
+        st.subheader("Login")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            if validate_login(username, password):
+                st.session_state.logged_in = True
+                st.session_state.username = username
+                st.success(f"✅ Welcome, {username}!")
+                st.experimental_rerun()
+            else:
+                st.error("❌ Invalid credentials")
+    with tab2:
+        st.subheader("Register")
+        new_user = st.text_input("New Username")
+        new_pass = st.text_input("New Password", type="password")
+        if st.button("Register"):
+            add_user(new_user, new_pass)
+            st.success("✅ Account created! You can now login.")
+
+else:
+    st.sidebar.success(f"Logged in as {st.session_state.username}")
+    df = load_inventory(st.session_state.username)
+
+    st.subheader("➕ Add Inventory Movement")
+    with st.form("add_form"):
+        product_name = st.text_input("Product Name")
+        batch_id = st.text_input("Batch ID")
+        stock_in = st.number_input("Stock In", min_value=0, value=0)
+        stock_out = st.number_input("Stock Out", min_value=0, value=0)
+        unit_price = st.number_input("Unit Price", min_value=0.0, format="%.2f")
+        quantity = st.number_input("Quantity", min_value=1, value=1)
+        requires_expiration = st.radio("Does this product require an expiration date?", ("Yes", "No"))
+        expiration_date = None
+        if requires_expiration == "Yes":
+            expiration_date = st.date_input("Expiration Date")
+        else:
+            st.info("🛈 No expiration date registered.")
+        submitted = st.form_submit_button("✅ Record Entry")
+        if submitted:
+            now = datetime.now(lima_tz)
+            total_units = stock_in - stock_out
+            total_price = unit_price * quantity
+            prev_stock = df[df["product_name"] == product_name]["total_stock"].iloc[-1] if product_name in df["product_name"].values else 0
+            new_stock = prev_stock + total_units
+            data = {
+                "timestamp_in": now.strftime("%Y-%m-%d %H:%M:%S") if stock_in > 0 else None,
+                "timestamp_out": now.strftime("%Y-%m-%d %H:%M:%S") if stock_out > 0 else None,
+                "product_name": product_name,
+                "batch_id": batch_id,
+                "stock_in": stock_in,
+                "stock_out": stock_out,
+                "total_stock": new_stock,
+                "unit_price": unit_price,
+                "quantity": quantity,
+                "total_price": total_price,
+                "total_units": total_units,
+                "expiration_date": expiration_date.strftime("%Y-%m-%d") if expiration_date else None,
+                "username": st.session_state.username
+            }
+            insert_inventory(data)
+            st.success(f"📦 Entry for **{product_name}** saved.")
+            st.experimental_rerun()
+
+    st.subheader("📊 Inventory Log")
+    st.dataframe(df, use_container_width=True)
+
     # ---------- AutoGPT-style Assistant ----------
     st.subheader("🤖 AutoGPT-style Inventory Assistant")
 
@@ -464,8 +451,7 @@ else:
         st.session_state['openrouter_api_key'] = ''
     if 'cohere_api_key' not in st.session_state:
         st.session_state['cohere_api_key'] = ''
-    # ---------- USER MODEL CHOICE (SINGLE INSTANCE) ----------
-    model_choice = st.radio("Choose Reasoning Model:", ["Mistral 7B", "Cohere Command R+"], index=0, key="model_choice")
+
     with st.expander("🔐 Enter Your API Keys"):
      model_choice = select_model()  # This must be called early
 
@@ -534,3 +520,6 @@ else:
                 st.session_state['auto_gpt_chat_history'].append({"role": "assistant", "content": full_response})
     else:
         st.warning("Please enter your API keys to use the assistant.")
+
+
+    
