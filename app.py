@@ -189,6 +189,11 @@ else:
     if not df.empty:
         df['timestamp_in'] = pd.to_datetime(df['timestamp_in'], errors='coerce')
 
+        # Filter by product name
+        unique_products = df['product_name'].dropna().unique().tolist()
+        selected_products = st.multiselect("Select Products to Display", unique_products, default=unique_products)
+        df = df[df['product_name'].isin(selected_products)]
+
         # Time range selector
         time_range = st.selectbox("Select Time Range", ["All", "Last 30 Days", "Last 7 Days"])
         if time_range == "Last 30 Days":
@@ -200,10 +205,11 @@ else:
         rolling_enabled = st.checkbox("Apply 3-day Rolling Average")
 
         # Add grouping frequency option with auto-detection
-suggested_freq = '15min' if df['timestamp_in'].nunique() > 10 else 'H'
-group_freq = st.selectbox("Group Data By", ["15min", "Hour", "Day"], index=["15min", "Hour", "Day"].index(suggested_freq))
-freq_code = {'15min': '15min', 'Hour': 'H', 'Day': 'D'}[group_freq]
-grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq=freq_code)])['total_stock'].max().reset_index()
+        suggested_freq = '15min' if df['timestamp_in'].nunique() > 10 else 'H'
+        group_freq = st.selectbox("Group Data By", ["15min", "Hour", "Day"], index=["15min", "Hour", "Day"].index(suggested_freq))
+        freq_code = {'15min': '15min', 'Hour': 'H', 'Day': 'D'}[group_freq]
+
+        grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq=freq_code)])['total_stock'].max().reset_index()
 
         if rolling_enabled:
             grouped['total_stock'] = grouped.groupby('product_name')['total_stock'].transform(lambda x: x.rolling(3, min_periods=1).mean())
@@ -247,4 +253,3 @@ grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq=freq_c
     st.dataframe(full_df, use_container_width=True)
     conn.close()
 
-    
