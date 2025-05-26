@@ -1,19 +1,10 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-import openai
-import cohere
-import streamlit as st
-import pandas as pd
-import sqlite3
+import hashlib
 from datetime import datetime, timedelta
 import pytz
-import hashlib
-import matplotlib.pyplot as plt
 import plotly.express as px
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from openai import OpenAI
 
 # ---------- CONFIGURATION ----------
 DB_NAME = "inventory.db"
@@ -82,23 +73,16 @@ def load_inventory(username):
     conn.close()
     return df
 
-# ---------- LOCAL LLM SETUP ----------
-@st.cache_resource
-def load_local_model():
-    tokenizer = AutoTokenizer.from_pretrained("sshleifer/tiny-gpt2")
-    model = AutoModelForCausalLM.from_pretrained("sshleifer/tiny-gpt2")
-    return tokenizer, model
-
 # ---------- MAIN APP ----------
 create_tables()
-st.set_page_config("📦 Inventory Tracker", layout="wide")
-st.title("📦 Inventory Management System - Lima Time")
+st.set_page_config("\ud83d\udce6 Inventory Tracker", layout="wide")
+st.title("\ud83d\udce6 Inventory Management System - Lima Time")
 
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
-    tab1, tab2 = st.tabs(["🔑 Login", "🆕 Register"])
+    tab1, tab2 = st.tabs(["\ud83d\udd11 Login", "\ud83c\udd95 Register"])
 
     with tab1:
         st.subheader("Login")
@@ -108,10 +92,10 @@ if not st.session_state.logged_in:
             if validate_login(username, password):
                 st.session_state.logged_in = True
                 st.session_state.username = username
-                st.success(f"✅ Welcome, {username}!")
+                st.success(f"\u2705 Welcome, {username}!")
                 st.experimental_rerun()
             else:
-                st.error("❌ Invalid credentials")
+                st.error("\u274c Invalid credentials")
 
     with tab2:
         st.subheader("Register")
@@ -119,14 +103,13 @@ if not st.session_state.logged_in:
         new_pass = st.text_input("New Password", type="password")
         if st.button("Register"):
             add_user(new_user, new_pass)
-            st.success("✅ Account created! You can now login.")
+            st.success("\u2705 Account created! You can now login.")
 else:
     st.sidebar.success(f"Logged in as {st.session_state.username}")
-
     df = load_inventory(st.session_state.username)
 
     with st.form("add_stock_form"):
-        st.subheader("➕ Add Inventory Movement")
+        st.subheader("\u2795 Add Inventory Movement")
         product_name = st.text_input("Product Name")
         batch_id = st.text_input("Batch ID")
         stock_in = st.number_input("Stock In", min_value=0, value=0)
@@ -139,9 +122,9 @@ else:
         if requires_expiration == "Yes":
             expiration_date = st.date_input("Expiration Date")
         else:
-            st.info("🛈 No expiration date registered.")
+            st.info("\ud83d\udcf2 No expiration date registered.")
 
-        submitted = st.form_submit_button("✅ Record Entry")
+        submitted = st.form_submit_button("\u2705 Record Entry")
         if submitted:
             now = datetime.now(lima_tz)
             total_units = stock_in - stock_out
@@ -169,10 +152,10 @@ else:
             }
 
             insert_inventory(data)
-            st.success(f"📦 Entry for **{product_name}** saved.")
+            st.success(f"\ud83d\udce6 Entry for **{product_name}** saved.")
             st.experimental_rerun()
 
-    st.subheader("📊 Inventory Log")
+    st.subheader("\ud83d\udcca Inventory Log")
     st.dataframe(df, use_container_width=True)
 
     if "expiration_date" in df.columns:
@@ -182,14 +165,14 @@ else:
                            (df['expiration_date'] <= datetime.now() + timedelta(days=7))]
 
         if not expired.empty:
-            st.warning("⚠️ Some products have **expired**:")
+            st.warning("\u26a0\ufe0f Some products have **expired**:")
             st.dataframe(expired[["product_name", "batch_id", "expiration_date"]])
 
         if not expiring_soon.empty:
-            st.info("🔔 Products **expiring soon** (within 7 days):")
+            st.info("\ud83d\udd14 Products **expiring soon** (within 7 days):")
             st.dataframe(expiring_soon[["product_name", "batch_id", "expiration_date"]])
 
-    st.subheader("🗑️ Delete Specific Inventory Row")
+    st.subheader("\ud83d\uddd1\ufe0f Delete Specific Inventory Row")
     if not df.empty:
         row_to_delete = st.selectbox("Select Row ID to Delete", df['id'].astype(str))
         if st.button("Delete Selected Row"):
@@ -197,140 +180,31 @@ else:
             conn.execute("DELETE FROM inventory WHERE id = ? AND username = ?", (row_to_delete, st.session_state.username))
             conn.commit()
             conn.close()
-            st.success(f"✅ Row with ID {row_to_delete} deleted.")
+            st.success(f"\u2705 Row with ID {row_to_delete} deleted.")
             st.experimental_rerun()
 
-    st.download_button("⬇ Download CSV", df.to_csv(index=False).encode(), "inventory.csv", "text/csv")
+    st.download_button("\u2b07 Download CSV", df.to_csv(index=False).encode(), "inventory.csv", "text/csv")
 
-    st.subheader("📈 Inventory Over Time (Bar Graph by Product)")
+    st.subheader("\ud83d\udcc8 Inventory Over Time (Line Graph by Product)")
     if not df.empty:
         df['timestamp_in'] = pd.to_datetime(df['timestamp_in'], errors='coerce')
         grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq='D')])['total_stock'].max().reset_index()
 
-        fig = px.bar(
+        fig = px.line(
             grouped,
             x='timestamp_in',
             y='total_stock',
             color='product_name',
-            barmode='group',
-            title="📊 Stock Level per Product Over Time"
+            title="\ud83d\udcc9 Stock Level per Product Over Time"
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("🗃️ Full Inventory Table (From Database)")
+    st.subheader("\ud83d\uddd3\ufe0f Full Inventory Table (From Database)")
     conn = sqlite3.connect(DB_NAME)
     full_df = pd.read_sql("SELECT * FROM inventory WHERE username = ?", conn, params=(st.session_state.username,))
     st.dataframe(full_df, use_container_width=True)
-
-    st.subheader("🧠 Custom SQL Query Engine")
-    st.markdown("""
-    Use SQL to run custom queries on your inventory.
-    Example:
-    ```sql
-    SELECT product_name, SUM(stock_in) AS total_in
-    FROM inventory
-    WHERE username = 'your_username'
-    GROUP BY product_name
-    ```
-    """)
-
-    query_input = st.text_area("Write SQL Query",
-        value=f"SELECT product_name, SUM(total_stock) as total FROM inventory WHERE username = '{st.session_state.username}' GROUP BY product_name")
-
-    if st.button("🚀 Run SQL Query"):
-        try:
-            user_query = query_input.replace(";", "")
-            df_query = pd.read_sql_query(user_query, conn)
-            st.success("✅ Query executed successfully")
-            st.dataframe(df_query, use_container_width=True)
-        except Exception as e:
-            st.error(f"⚠️ SQL Error: {e}")
     conn.close()
 
-    # ---------- CHATBOT ----------
-
-# Initialize session state for API keys
-if 'openrouter_api_key' not in st.session_state:
-    st.session_state['openrouter_api_key'] = ''
-if 'cohere_api_key' not in st.session_state:
-    st.session_state['cohere_api_key'] = ''
-
-st.subheader("🤖 AutoGPT-like Inventory Assistant")
-
-# Prompt user for API Keys
-with st.expander("🔐 Enter Your API Keys", expanded=False):
-    openrouter_api_key = st.text_input("OpenRouter API Key", type="password")
-    cohere_api_key = st.text_input("Cohere API Key", type="password")
-    if openrouter_api_key:
-        st.session_state['openrouter_api_key'] = openrouter_api_key
-        st.success("OpenRouter API key saved successfully!")
-    if cohere_api_key:
-        st.session_state['cohere_api_key'] = cohere_api_key
-        st.success("Cohere API key saved successfully!")
-
-# Proceed only if both API keys are provided
-if st.session_state['openrouter_api_key'] and st.session_state['cohere_api_key']:
-    # Initialize OpenAI client with OpenRouter's base URL
-    openrouter_client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=st.session_state['openrouter_api_key']
-    )
-
-    # Initialize Cohere client
-    cohere_client = cohere.Client(st.session_state['cohere_api_key'])
-
-    # Initialize chat history
-    if 'auto_gpt_chat_history' not in st.session_state:
-        st.session_state['auto_gpt_chat_history'] = []
-
-    # Display chat history
-    for message in st.session_state['auto_gpt_chat_history']:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    # User input
-    if prompt := st.chat_input("Describe your inventory task..."):
-        # Append user message to chat history
-        st.session_state['auto_gpt_chat_history'].append({"role": "user", "content": prompt})
-
-        # Display user message
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Generate response from Kimi AI
-        with st.chat_message("assistant"):
-            message_placeholder = st.empty()
-            full_response = ""
-
-            try:
-                # Use Cohere to summarize the user's intent
-                cohere_response = cohere_client.summarize(
-                    text=prompt,
-                    length='short',
-                    format='plain',
-                    model='summarize-xlarge',
-                    additional_command='Summarize the task for Kimi AI.'
-                )
-                summarized_prompt = cohere_response.summary
-
-                # Use Kimi AI to process the summarized prompt
-                response = openrouter_client.chat.completions.create(
-                    model="moonshotai/kimi-vl-a3b-thinking:free",
-                    messages=[
-                        {"role": "system", "content": "You are an autonomous inventory management assistant."},
-                        {"role": "user", "content": summarized_prompt}
-                    ]
-                )
-                full_response = response.choices[0].message["content"]
-                message_placeholder.markdown(full_response)
-            except Exception as e:
-                message_placeholder.markdown(f"⚠️ An error occurred: {e}")
-                full_response = f"⚠️ An error occurred: {e}"
-
-            # Append assistant response to chat history
-            st.session_state['auto_gpt_chat_history'].append({"role": "assistant", "content": full_response})
-else:
-    st.warning("Please enter both your OpenRouter and Cohere API keys to use the AutoGPT-like assistant.")
 
 
     
