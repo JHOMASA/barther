@@ -188,15 +188,32 @@ else:
     st.subheader("📈 Inventory Over Time (Line Graph by Product)")
     if not df.empty:
         df['timestamp_in'] = pd.to_datetime(df['timestamp_in'], errors='coerce')
+
+        # Time range selector
+        time_range = st.selectbox("Select Time Range", ["All", "Last 30 Days", "Last 7 Days"])
+        if time_range == "Last 30 Days":
+            df = df[df['timestamp_in'] >= datetime.now() - timedelta(days=30)]
+        elif time_range == "Last 7 Days":
+            df = df[df['timestamp_in'] >= datetime.now() - timedelta(days=7)]
+
+        # Toggle rolling average
+        rolling_enabled = st.checkbox("Apply 3-day Rolling Average")
+
         grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq='D')])['total_stock'].max().reset_index()
+
+        if rolling_enabled:
+            grouped['total_stock'] = grouped.groupby('product_name')['total_stock'].transform(lambda x: x.rolling(3, min_periods=1).mean())
 
         fig = px.line(
             grouped,
             x='timestamp_in',
             y='total_stock',
             color='product_name',
-            title="📉 Stock Level per Product Over Time"
+            title="📉 Stock Level per Product Over Time",
+            labels={'timestamp_in': 'Date', 'total_stock': 'Total Stock'}
         )
+        fig.update_traces(mode='lines+markers', hovertemplate='%{x|%Y-%m-%d}<br>%{y} units')
+        fig.update_layout(hovermode='x unified')
         st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("🗃️ Full Inventory Table (From Database)")
