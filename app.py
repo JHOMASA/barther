@@ -6,14 +6,6 @@ from datetime import datetime, timedelta
 import pytz
 import plotly.express as px
 
-import streamlit as st
-import pandas as pd
-import sqlite3
-import hashlib
-from datetime import datetime, timedelta
-import pytz
-import plotly.express as px
-
 # ---------- CONFIGURATION ----------
 DB_NAME = "inventory.db"
 lima_tz = pytz.timezone("America/Lima")
@@ -207,7 +199,11 @@ else:
         # Toggle rolling average
         rolling_enabled = st.checkbox("Apply 3-day Rolling Average")
 
-        grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq='D')])['total_stock'].max().reset_index()
+        # Add grouping frequency option with auto-detection
+suggested_freq = '15min' if df['timestamp_in'].nunique() > 10 else 'H'
+group_freq = st.selectbox("Group Data By", ["15min", "Hour", "Day"], index=["15min", "Hour", "Day"].index(suggested_freq))
+freq_code = {'15min': '15min', 'Hour': 'H', 'Day': 'D'}[group_freq]
+grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq=freq_code)])['total_stock'].max().reset_index()
 
         if rolling_enabled:
             grouped['total_stock'] = grouped.groupby('product_name')['total_stock'].transform(lambda x: x.rolling(3, min_periods=1).mean())
@@ -250,6 +246,5 @@ else:
     full_df = pd.read_sql("SELECT * FROM inventory WHERE username = ?", conn, params=(st.session_state.username,))
     st.dataframe(full_df, use_container_width=True)
     conn.close()
-
 
     
