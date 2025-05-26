@@ -6,6 +6,14 @@ from datetime import datetime, timedelta
 import pytz
 import plotly.express as px
 
+import streamlit as st
+import pandas as pd
+import sqlite3
+import hashlib
+from datetime import datetime, timedelta
+import pytz
+import plotly.express as px
+
 # ---------- CONFIGURATION ----------
 DB_NAME = "inventory.db"
 lima_tz = pytz.timezone("America/Lima")
@@ -216,13 +224,32 @@ else:
         fig.update_layout(hovermode='x unified')
         st.plotly_chart(fig, use_container_width=True)
 
+    st.subheader("📋 Inventory Summary Dashboard")
+    if not df.empty:
+        latest_stock = df.groupby('product_name')['total_stock'].last()
+        total_inventory_value = df['total_price'].sum()
+        most_stocked = latest_stock.idxmax() if not latest_stock.empty else "N/A"
+        least_stocked = latest_stock.idxmin() if not latest_stock.empty else "N/A"
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("🧮 Total Inventory Value", f"${total_inventory_value:,.2f}")
+        col2.metric("📈 Most Stocked Product", most_stocked)
+        col3.metric("📉 Least Stocked Product", least_stocked)
+
+        # Reorder alert: Show warning if any product is below 10% of its max stock
+        max_stock = df.groupby('product_name')['total_stock'].max()
+        latest_stock = df.groupby('product_name')['total_stock'].last()
+        low_stock_products = [p for p in latest_stock.index if latest_stock[p] <= 0.1 * max_stock.get(p, 0)]
+
+        if low_stock_products:
+            st.warning("🚨 Reorder Alert: The following products are below 10% of their maximum recorded stock:")
+            st.write(", ".join(low_stock_products))
+
     st.subheader("🗃️ Full Inventory Table (From Database)")
     conn = sqlite3.connect(DB_NAME)
     full_df = pd.read_sql("SELECT * FROM inventory WHERE username = ?", conn, params=(st.session_state.username,))
     st.dataframe(full_df, use_container_width=True)
     conn.close()
-
-
 
 
     
