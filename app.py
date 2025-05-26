@@ -206,7 +206,9 @@ else:
 
         # Add grouping frequency option with auto-detection
         suggested_freq = '15min' if df['timestamp_in'].nunique() > 10 else 'H'
-        group_freq = st.selectbox("Group Data By", ["15min", "Hour", "Day"], index=["15min", "Hour", "Day"].index(suggested_freq))
+        group_options = ["15min", "Hour", "Day"]
+        default_index = group_options.index(suggested_freq) if suggested_freq in group_options else 0
+        group_freq = st.selectbox("Group Data By", group_options, index=default_index)
         freq_code = {'15min': '15min', 'Hour': 'H', 'Day': 'D'}[group_freq]
 
         grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq=freq_code)])['total_stock'].max().reset_index()
