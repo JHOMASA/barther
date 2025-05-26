@@ -1,5 +1,4 @@
 import streamlit as st
-st.set_page_config("📦 Inventory Tracker", layout="wide")
 import pandas as pd
 import sqlite3
 import openai
@@ -15,9 +14,7 @@ import plotly.express as px
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from openai import OpenAI
-from graphviz import Digraph
 
-st.set_page_config("📦 Inventory Tracker", layout="wide")
 # ---------- CONFIGURATION ----------
 DB_NAME = "inventory.db"
 lima_tz = pytz.timezone("America/Lima")
@@ -94,6 +91,8 @@ def load_local_model():
 
 # ---------- MAIN APP ----------
 create_tables()
+st.set_page_config("📦 Inventory Tracker", layout="wide")
+st.title("📦 Inventory Management System - Lima Time")
 
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
@@ -181,6 +180,7 @@ else:
         expired = df[df['expiration_date'] < datetime.now()]
         expiring_soon = df[(df['expiration_date'] >= datetime.now()) &
                            (df['expiration_date'] <= datetime.now() + timedelta(days=7))]
+
         if not expired.empty:
             st.warning("⚠️ Some products have **expired**:")
             st.dataframe(expired[["product_name", "batch_id", "expiration_date"]])
@@ -250,7 +250,6 @@ else:
     # ---------- CHATBOT ----------
 
 # Initialize session state for API keys
-# Initialize session state for API keys
 if 'openrouter_api_key' not in st.session_state:
     st.session_state['openrouter_api_key'] = ''
 if 'cohere_api_key' not in st.session_state:
@@ -304,19 +303,15 @@ if st.session_state['openrouter_api_key'] and st.session_state['cohere_api_key']
             full_response = ""
 
             try:
-                # Check if prompt length meets Cohere's minimum requirement
-                if len(prompt) >= 250:
-                    # Use Cohere to summarize the user's intent
-                    cohere_response = cohere_client.summarize(
-                        text=prompt,
-                        length='short',
-                        format='plain',
-                        model='summarize-xlarge',
-                        additional_command='Summarize the task for Kimi AI.'
-                    )
-                    summarized_prompt = cohere_response.summary
-                else:
-                    summarized_prompt = prompt  # Use original prompt if too short for summarization
+                # Use Cohere to summarize the user's intent
+                cohere_response = cohere_client.summarize(
+                    text=prompt,
+                    length='short',
+                    format='plain',
+                    model='summarize-xlarge',
+                    additional_command='Summarize the task for Kimi AI.'
+                )
+                summarized_prompt = cohere_response.summary
 
                 # Use Kimi AI to process the summarized prompt
                 response = openrouter_client.chat.completions.create(
@@ -326,7 +321,7 @@ if st.session_state['openrouter_api_key'] and st.session_state['cohere_api_key']
                         {"role": "user", "content": summarized_prompt}
                     ]
                 )
-                full_response = response.choices[0].message.content
+                full_response = response.choices[0].message["content"]
                 message_placeholder.markdown(full_response)
             except Exception as e:
                 message_placeholder.markdown(f"⚠️ An error occurred: {e}")
