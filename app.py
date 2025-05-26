@@ -75,14 +75,14 @@ def load_inventory(username):
 
 # ---------- MAIN APP ----------
 create_tables()
-st.set_page_config("\ud83d\udce6 Inventory Tracker", layout="wide")
-st.title("\ud83d\udce6 Inventory Management System - Lima Time")
+st.set_page_config(page_title="Inventory Tracker", layout="wide")
+st.title("📦 Inventory Management System - Lima Time")
 
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
-    tab1, tab2 = st.tabs(["\ud83d\udd11 Login", "\ud83c\udd95 Register"])
+    tab1, tab2 = st.tabs(["🔑 Login", "🆕 Register"])
 
     with tab1:
         st.subheader("Login")
@@ -92,10 +92,10 @@ if not st.session_state.logged_in:
             if validate_login(username, password):
                 st.session_state.logged_in = True
                 st.session_state.username = username
-                st.success(f"\u2705 Welcome, {username}!")
+                st.success(f"✅ Welcome, {username}!")
                 st.experimental_rerun()
             else:
-                st.error("\u274c Invalid credentials")
+                st.error("❌ Invalid credentials")
 
     with tab2:
         st.subheader("Register")
@@ -103,13 +103,13 @@ if not st.session_state.logged_in:
         new_pass = st.text_input("New Password", type="password")
         if st.button("Register"):
             add_user(new_user, new_pass)
-            st.success("\u2705 Account created! You can now login.")
+            st.success("✅ Account created! You can now login.")
 else:
     st.sidebar.success(f"Logged in as {st.session_state.username}")
     df = load_inventory(st.session_state.username)
 
     with st.form("add_stock_form"):
-        st.subheader("\u2795 Add Inventory Movement")
+        st.subheader("➕ Add Inventory Movement")
         product_name = st.text_input("Product Name")
         batch_id = st.text_input("Batch ID")
         stock_in = st.number_input("Stock In", min_value=0, value=0)
@@ -122,9 +122,9 @@ else:
         if requires_expiration == "Yes":
             expiration_date = st.date_input("Expiration Date")
         else:
-            st.info("\ud83d\udcf2 No expiration date registered.")
+            st.info("🛈 No expiration date registered.")
 
-        submitted = st.form_submit_button("\u2705 Record Entry")
+        submitted = st.form_submit_button("✅ Record Entry")
         if submitted:
             now = datetime.now(lima_tz)
             total_units = stock_in - stock_out
@@ -152,10 +152,10 @@ else:
             }
 
             insert_inventory(data)
-            st.success(f"\ud83d\udce6 Entry for **{product_name}** saved.")
+            st.success(f"📦 Entry for **{product_name}** saved.")
             st.experimental_rerun()
 
-    st.subheader("\ud83d\udcca Inventory Log")
+    st.subheader("📊 Inventory Log")
     st.dataframe(df, use_container_width=True)
 
     if "expiration_date" in df.columns:
@@ -165,14 +165,14 @@ else:
                            (df['expiration_date'] <= datetime.now() + timedelta(days=7))]
 
         if not expired.empty:
-            st.warning("\u26a0\ufe0f Some products have **expired**:")
+            st.warning("⚠️ Some products have **expired**:")
             st.dataframe(expired[["product_name", "batch_id", "expiration_date"]])
 
         if not expiring_soon.empty:
-            st.info("\ud83d\udd14 Products **expiring soon** (within 7 days):")
+            st.info("🔔 Products **expiring soon** (within 7 days):")
             st.dataframe(expiring_soon[["product_name", "batch_id", "expiration_date"]])
 
-    st.subheader("\ud83d\uddd1\ufe0f Delete Specific Inventory Row")
+    st.subheader("🗑️ Delete Specific Inventory Row")
     if not df.empty:
         row_to_delete = st.selectbox("Select Row ID to Delete", df['id'].astype(str))
         if st.button("Delete Selected Row"):
@@ -180,12 +180,12 @@ else:
             conn.execute("DELETE FROM inventory WHERE id = ? AND username = ?", (row_to_delete, st.session_state.username))
             conn.commit()
             conn.close()
-            st.success(f"\u2705 Row with ID {row_to_delete} deleted.")
+            st.success(f"✅ Row with ID {row_to_delete} deleted.")
             st.experimental_rerun()
 
-    st.download_button("\u2b07 Download CSV", df.to_csv(index=False).encode(), "inventory.csv", "text/csv")
+    st.download_button("⬇ Download CSV", df.to_csv(index=False).encode(), "inventory.csv", "text/csv")
 
-    st.subheader("\ud83d\udcc8 Inventory Over Time (Line Graph by Product)")
+    st.subheader("📈 Inventory Over Time (Line Graph by Product)")
     if not df.empty:
         df['timestamp_in'] = pd.to_datetime(df['timestamp_in'], errors='coerce')
         grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq='D')])['total_stock'].max().reset_index()
@@ -195,15 +195,16 @@ else:
             x='timestamp_in',
             y='total_stock',
             color='product_name',
-            title="\ud83d\udcc9 Stock Level per Product Over Time"
+            title="📉 Stock Level per Product Over Time"
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("\ud83d\uddd3\ufe0f Full Inventory Table (From Database)")
+    st.subheader("🗃️ Full Inventory Table (From Database)")
     conn = sqlite3.connect(DB_NAME)
     full_df = pd.read_sql("SELECT * FROM inventory WHERE username = ?", conn, params=(st.session_state.username,))
     st.dataframe(full_df, use_container_width=True)
     conn.close()
+
 
 
 
