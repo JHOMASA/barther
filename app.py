@@ -111,7 +111,8 @@ else:
 
     with st.form("add_stock_form"):
         st.subheader("➕ Add Inventory Movement")
-        product_name = st.text_input("Product Name")
+        product_name = st.text_input("Product Name"),
+        product_id = st.text_input("Product ID"),
         batch_id = st.text_input("Batch ID")
         stock_in = st.number_input("Stock In", min_value=0, value=0)
         stock_out = st.number_input("Stock Out", min_value=0, value=0)
