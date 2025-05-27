@@ -158,23 +158,27 @@ else:
 
     st.subheader("📦 Interactive Batch-Level Stock Summary")
     if not df.empty:
-        summary = (
-            df.groupby(['product_name', 'product_id', 'batch_id'])
-            .agg(
-                total_in=pd.NamedAgg(column='stock_in', aggfunc='sum'),
-                total_out=pd.NamedAgg(column='stock_out', aggfunc='sum')
+        if 'product_id' in df.columns:
+            summary = (
+                df.groupby(['product_name', 'product_id', 'batch_id'])
+                .agg(
+                    total_in=pd.NamedAgg(column='stock_in', aggfunc='sum'),
+                    total_out=pd.NamedAgg(column='stock_out', aggfunc='sum')
+                )
+                .reset_index()
             )
-            .reset_index()
-        )
-        summary['current_stock'] = summary['total_in'] - summary['total_out']
+            summary['current_stock'] = summary['total_in'] - summary['total_out']
 
-        gb = GridOptionsBuilder.from_dataframe(summary[['product_name', 'product_id', 'batch_id', 'current_stock']])
-        gb.configure_pagination()
-        gb.configure_side_bar()
-        gb.configure_default_column(filterable=True, sortable=True, editable=False)
-        grid_options = gb.build()
+            gb = GridOptionsBuilder.from_dataframe(summary[['product_name', 'product_id', 'batch_id', 'current_stock']])
+            gb.configure_pagination()
+            gb.configure_side_bar()
+            gb.configure_default_column(filterable=True, sortable=True, editable=False)
+            grid_options = gb.build()
 
-        AgGrid(summary[['product_name', 'product_id', 'batch_id', 'current_stock']], gridOptions=grid_options, height=350, theme="streamlit")
+            AgGrid(summary[['product_name', 'product_id', 'batch_id', 'current_stock']], gridOptions=grid_options, height=350, theme="streamlit")
+        else:
+            st.warning("⚠️ Your inventory table does not include 'product_id'. New records will have it, but old entries won’t show here.")
+
 
     st.subheader("📈 Stock Movement Over Time")
     if not df.empty:
