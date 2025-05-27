@@ -183,7 +183,18 @@ else:
     st.subheader("📈 Stock Movement Over Time")
     if not df.empty:
         df['timestamp'] = pd.to_datetime(df['timestamp_in'].fillna(df['timestamp_out']), errors='coerce')
-        time_filtered = df[['timestamp', 'product_name', 'product_id', 'batch_id', 'stock_in', 'stock_out']].dropna()
+
+        required_cols = ['timestamp', 'product_name', 'batch_id', 'stock_in', 'stock_out']
+        if 'product_id' in df.columns:
+            required_cols.insert(2, 'product_id')  # Insert product_id after product_name
+
+        missing_cols = [col for col in required_cols if col not in df.columns]
+
+        if missing_cols:
+            st.warning(f"⚠️ Missing columns in your inventory: {', '.join(missing_cols)}. Please add new inventory entries with full data.")
+            time_filtered = pd.DataFrame()  # Empty to prevent crash
+        else:
+            time_filtered = df[required_cols].dropna()
 
         selected_product = st.selectbox("Select Product to View Stock Movement", df['product_name'].unique())
         product_df = time_filtered[time_filtered['product_name'] == selected_product]
