@@ -25,6 +25,7 @@ def create_tables():
     c.execute("""
     CREATE TABLE IF NOT EXISTS inventory (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id TEXT,
         timestamp_in TEXT,
         timestamp_out TEXT,
         product_name TEXT,
