@@ -8,3 +8,4 @@ transformers==4.40.1
 cohere==5.15.0
 openai==1.81.0
 graphviz==0.20.1
+streamlit-aggrid==0.3.4
