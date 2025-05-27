@@ -224,8 +224,21 @@ else:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        csv_data = product_df[['timestamp', 'product_id', 'stock_in', 'stock_out', 'cumulative_stock']].to_csv(index=False).encode()
-        st.download_button("⬇ Download Stock Movement CSV", csv_data, f"{selected_product}_{selected_batch}_stock_movement.csv", "text/csv")
+        export_cols = ['timestamp', 'stock_in', 'stock_out', 'cumulative_stock']
+        if 'product_id' in product_df.columns:
+            export_cols.insert(1, 'product_id')  # place after timestamp
+
+        missing_cols = [col for col in export_cols if col not in product_df.columns]
+        if missing_cols:
+            st.warning(f"⚠️ Cannot export CSV: missing columns: {', '.join(missing_cols)}")
+        else:
+            csv_data = product_df[export_cols].to_csv(index=False).encode()
+            st.download_button(
+                "⬇ Download Stock Movement CSV",
+                csv_data,
+                f"{selected_product}_{selected_batch}_stock_movement.csv",
+                "text/csv"
+            )
 
     st.subheader("📊 Inventory Log")
     st.dataframe(df, use_container_width=True)
