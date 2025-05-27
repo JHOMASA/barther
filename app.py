@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import pytz
 import plotly.express as px
 from st_aggrid import AgGrid, GridOptionsBuilder
+import plotly.graph_objects as go
 
 # ---------- CONFIGURATION ----------
 DB_NAME = "inventory.db"
@@ -128,7 +129,6 @@ else:
             now = datetime.now(lima_tz)
             total_units = stock_in - stock_out
             total_price = unit_price * quantity
-
             batch_df = df[(df["product_name"] == product_name) & (df["batch_id"] == batch_id)]
             prev_stock = batch_df["total_stock"].iloc[-1] if not batch_df.empty else 0
             new_stock = prev_stock + total_units
@@ -153,7 +153,6 @@ else:
             st.success(f"📦 Entry for **{product_name}** (Batch {batch_id}) saved.")
             st.experimental_rerun()
 
-    # 📦 Interactive Searchable Batch-Level Stock Summary
     st.subheader("📦 Interactive Batch-Level Stock Summary")
     if not df.empty:
         summary = (
@@ -174,37 +173,40 @@ else:
 
         AgGrid(summary[['product_name', 'batch_id', 'current_stock']], gridOptions=grid_options, height=350, theme="streamlit")
 
+    st.subheader("📈 Stock Movement Over Time")
+    if not df.empty:
+        df['timestamp'] = pd.to_datetime(df['timestamp_in'].fillna(df['timestamp_out']), errors='coerce')
+        time_filtered = df[['timestamp', 'product_name', 'batch_id', 'stock_in', 'stock_out']].dropna()
+
+        selected_product = st.selectbox("Select Product to View Stock Movement", df['product_name'].unique())
+        product_df = time_filtered[time_filtered['product_name'] == selected_product]
+
+        selected_batch = st.selectbox("Select Batch ID (optional)", ['All'] + sorted(product_df['batch_id'].dropna().unique().tolist()))
+        if selected_batch != 'All':
+            product_df = product_df[product_df['batch_id'] == selected_batch]
+
+        product_df = product_df.sort_values("timestamp")
+        product_df['net_stock'] = product_df['stock_in'] - product_df['stock_out']
+        product_df['cumulative_stock'] = product_df['net_stock'].cumsum()
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=product_df['timestamp'], y=product_df['stock_in'], mode='lines+markers', name='Stock In'))
+        fig.add_trace(go.Scatter(x=product_df['timestamp'], y=product_df['stock_out'], mode='lines+markers', name='Stock Out'))
+        fig.add_trace(go.Scatter(x=product_df['timestamp'], y=product_df['cumulative_stock'], mode='lines+markers', name='Net Stock'))
+
+        fig.update_layout(title=f"Stock Movement for {selected_product} ({selected_batch})",
+                          xaxis_title="Date",
+                          yaxis_title="Units",
+                          legend_title="Legend",
+                          hovermode="x unified")
+        st.plotly_chart(fig, use_container_width=True)
+
+        csv_data = product_df[['timestamp', 'stock_in', 'stock_out', 'cumulative_stock']].to_csv(index=False).encode()
+        st.download_button("⬇ Download Stock Movement CSV", csv_data, f"{selected_product}_{selected_batch}_stock_movement.csv", "text/csv")
+
     st.subheader("📊 Inventory Log")
     st.dataframe(df, use_container_width=True)
 
-    if "expiration_date" in df.columns:
-        df['expiration_date'] = pd.to_datetime(df['expiration_date'], errors='coerce')
-        expired = df[df['expiration_date'] < datetime.now()]
-        expiring_soon = df[(df['expiration_date'] >= datetime.now()) &
-                           (df['expiration_date'] <= datetime.now() + timedelta(days=7))]
-
-        if not expired.empty:
-            st.warning("⚠️ Some products have **expired**:")
-            st.dataframe(expired[["product_name", "batch_id", "expiration_date"]])
-
-        if not expiring_soon.empty:
-            st.info("🔔 Products **expiring soon** (within 7 days):")
-            st.dataframe(expiring_soon[["product_name", "batch_id", "expiration_date"]])
-
-    st.subheader("🗑️ Delete Specific Inventory Row")
-    if not df.empty:
-        row_to_delete = st.selectbox("Select Row ID to Delete", df['id'].astype(str))
-        if st.button("Delete Selected Row"):
-            conn = sqlite3.connect(DB_NAME)
-            conn.execute("DELETE FROM inventory WHERE id = ? AND username = ?", (row_to_delete, st.session_state.username))
-            conn.commit()
-            conn.close()
-            st.success(f"✅ Row with ID {row_to_delete} deleted.")
-            st.experimental_rerun()
-
-    st.download_button("⬇ Download CSV", df.to_csv(index=False).encode(), "inventory.csv", "text/csv")
-
-    # 🗃️ Internal Database Viewer
     st.subheader("🗃️ Internal Database Explorer")
     conn = sqlite3.connect(DB_NAME)
     table_choice = st.selectbox("Select Table to View", ["inventory", "users"])
