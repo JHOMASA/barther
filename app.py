@@ -5,6 +5,7 @@ import hashlib
 from datetime import datetime, timedelta
 import pytz
 import plotly.express as px
+from st_aggrid import AgGrid, GridOptionsBuilder
 
 # ---------- CONFIGURATION ----------
 DB_NAME = "inventory.db"
@@ -128,7 +129,6 @@ else:
             total_units = stock_in - stock_out
             total_price = unit_price * quantity
 
-            # Batch-specific stock handling
             batch_df = df[(df["product_name"] == product_name) & (df["batch_id"] == batch_id)]
             prev_stock = batch_df["total_stock"].iloc[-1] if not batch_df.empty else 0
             new_stock = prev_stock + total_units
@@ -153,8 +153,8 @@ else:
             st.success(f"📦 Entry for **{product_name}** (Batch {batch_id}) saved.")
             st.experimental_rerun()
 
-    # 📦 Batch-Level Stock Summary
-    st.subheader("📦 Batch-Level Stock Summary (Current Available Stock)")
+    # 📦 Interactive Searchable Batch-Level Stock Summary
+    st.subheader("📦 Interactive Batch-Level Stock Summary")
     if not df.empty:
         summary = (
             df.groupby(['product_name', 'batch_id'])
@@ -165,7 +165,14 @@ else:
             .reset_index()
         )
         summary['current_stock'] = summary['total_in'] - summary['total_out']
-        st.dataframe(summary[['product_name', 'batch_id', 'current_stock']], use_container_width=True)
+
+        gb = GridOptionsBuilder.from_dataframe(summary[['product_name', 'batch_id', 'current_stock']])
+        gb.configure_pagination()
+        gb.configure_side_bar()
+        gb.configure_default_column(filterable=True, sortable=True, editable=False)
+        grid_options = gb.build()
+
+        AgGrid(summary[['product_name', 'batch_id', 'current_stock']], gridOptions=grid_options, height=350, theme="streamlit")
 
     st.subheader("📊 Inventory Log")
     st.dataframe(df, use_container_width=True)
@@ -210,3 +217,4 @@ else:
         f"{table_choice}.csv",
         "text/csv"
     )
+
