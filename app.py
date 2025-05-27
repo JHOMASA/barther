@@ -137,6 +137,7 @@ else:
             data = {
                 "timestamp_in": now.strftime("%Y-%m-%d %H:%M:%S") if stock_in > 0 else None,
                 "timestamp_out": now.strftime("%Y-%m-%d %H:%M:%S") if stock_out > 0 else None,
+                "product_id": product_id,
                 "product_name": product_name,
                 "batch_id": batch_id,
                 "stock_in": stock_in,
