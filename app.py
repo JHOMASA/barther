@@ -111,8 +111,8 @@ else:
 
     with st.form("add_stock_form"):
         st.subheader("➕ Add Inventory Movement")
-        product_name = st.text_input("Product Name"),
-        product_id = st.text_input("Product ID"),
+        product_name = st.text_input("Product Name")
+        product_id = st.text_input("Product ID")
         batch_id = st.text_input("Batch ID")
         stock_in = st.number_input("Stock In", min_value=0, value=0)
         stock_out = st.number_input("Stock Out", min_value=0, value=0)
@@ -159,7 +159,7 @@ else:
     st.subheader("📦 Interactive Batch-Level Stock Summary")
     if not df.empty:
         summary = (
-            df.groupby(['product_name', 'batch_id'])
+            df.groupby(['product_name', 'product_id', 'batch_id'])
             .agg(
                 total_in=pd.NamedAgg(column='stock_in', aggfunc='sum'),
                 total_out=pd.NamedAgg(column='stock_out', aggfunc='sum')
@@ -168,21 +168,22 @@ else:
         )
         summary['current_stock'] = summary['total_in'] - summary['total_out']
 
-        gb = GridOptionsBuilder.from_dataframe(summary[['product_name', 'batch_id', 'current_stock']])
+        gb = GridOptionsBuilder.from_dataframe(summary[['product_name', 'product_id', 'batch_id', 'current_stock']])
         gb.configure_pagination()
         gb.configure_side_bar()
         gb.configure_default_column(filterable=True, sortable=True, editable=False)
         grid_options = gb.build()
 
-        AgGrid(summary[['product_name', 'batch_id', 'current_stock']], gridOptions=grid_options, height=350, theme="streamlit")
+        AgGrid(summary[['product_name', 'product_id', 'batch_id', 'current_stock']], gridOptions=grid_options, height=350, theme="streamlit")
 
     st.subheader("📈 Stock Movement Over Time")
     if not df.empty:
         df['timestamp'] = pd.to_datetime(df['timestamp_in'].fillna(df['timestamp_out']), errors='coerce')
-        time_filtered = df[['timestamp', 'product_name', 'batch_id', 'stock_in', 'stock_out']].dropna()
+        time_filtered = df[['timestamp', 'product_name', 'product_id', 'batch_id', 'stock_in', 'stock_out']].dropna()
 
         selected_product = st.selectbox("Select Product to View Stock Movement", df['product_name'].unique())
         product_df = time_filtered[time_filtered['product_name'] == selected_product]
+        selected_product_id = product_df['product_id'].iloc[0] if not product_df.empty else ""
 
         selected_batch = st.selectbox("Select Batch ID (optional)", ['All'] + sorted(product_df['batch_id'].dropna().unique().tolist()))
         if selected_batch != 'All':
@@ -197,14 +198,16 @@ else:
         fig.add_trace(go.Scatter(x=product_df['timestamp'], y=product_df['stock_out'], mode='lines+markers', name='Stock Out'))
         fig.add_trace(go.Scatter(x=product_df['timestamp'], y=product_df['cumulative_stock'], mode='lines+markers', name='Net Stock'))
 
-        fig.update_layout(title=f"Stock Movement for {selected_product} ({selected_batch})",
-                          xaxis_title="Date",
-                          yaxis_title="Units",
-                          legend_title="Legend",
-                          hovermode="x unified")
+        fig.update_layout(
+            title=f"Stock Movement for {selected_product} [ID: {selected_product_id}] ({selected_batch})",
+            xaxis_title="Date",
+            yaxis_title="Units",
+            legend_title="Legend",
+            hovermode="x unified"
+        )
         st.plotly_chart(fig, use_container_width=True)
 
-        csv_data = product_df[['timestamp', 'stock_in', 'stock_out', 'cumulative_stock']].to_csv(index=False).encode()
+        csv_data = product_df[['timestamp', 'product_id', 'stock_in', 'stock_out', 'cumulative_stock']].to_csv(index=False).encode()
         st.download_button("⬇ Download Stock Movement CSV", csv_data, f"{selected_product}_{selected_batch}_stock_movement.csv", "text/csv")
 
     st.subheader("📊 Inventory Log")
@@ -222,4 +225,3 @@ else:
         f"{table_choice}.csv",
         "text/csv"
     )
-
