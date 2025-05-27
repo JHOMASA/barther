@@ -14,7 +14,6 @@ lima_tz = pytz.timezone("America/Lima")
 def create_tables():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         username TEXT PRIMARY KEY,
@@ -198,3 +197,16 @@ else:
 
     st.download_button("⬇ Download CSV", df.to_csv(index=False).encode(), "inventory.csv", "text/csv")
 
+    # 🗃️ Internal Database Viewer
+    st.subheader("🗃️ Internal Database Explorer")
+    conn = sqlite3.connect(DB_NAME)
+    table_choice = st.selectbox("Select Table to View", ["inventory", "users"])
+    df_table = pd.read_sql(f"SELECT * FROM {table_choice}", conn)
+    conn.close()
+    st.dataframe(df_table, use_container_width=True)
+    st.download_button(
+        f"⬇ Download {table_choice}.csv",
+        df_table.to_csv(index=False).encode(),
+        f"{table_choice}.csv",
+        "text/csv"
+    )
