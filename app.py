@@ -198,8 +198,10 @@ else:
 
         selected_product = st.selectbox("Select Product to View Stock Movement", df['product_name'].unique())
         product_df = time_filtered[time_filtered['product_name'] == selected_product]
-        selected_product_id = product_df['product_id'].iloc[0] if not product_df.empty else ""
-
+        if not product_df.empty and 'product_id' in product_df.columns:
+            selected_product_id = product_df['product_id'].iloc[0]
+        else:
+            selected_product_id = "N/A"
         selected_batch = st.selectbox("Select Batch ID (optional)", ['All'] + sorted(product_df['batch_id'].dropna().unique().tolist()))
         if selected_batch != 'All':
             product_df = product_df[product_df['batch_id'] == selected_batch]
