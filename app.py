@@ -21,7 +21,6 @@ def create_tables():
         password TEXT NOT NULL
     )
     """)
-
     c.execute("""
     CREATE TABLE IF NOT EXISTS inventory (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,10 +128,10 @@ else:
             now = datetime.now(lima_tz)
             total_units = stock_in - stock_out
             total_price = unit_price * quantity
-            prev_stock = (
-                df[df["product_name"] == product_name]["total_stock"].iloc[-1]
-                if product_name in df["product_name"].values else 0
-            )
+
+            # Batch-specific stock handling
+            batch_df = df[(df["product_name"] == product_name) & (df["batch_id"] == batch_id)]
+            prev_stock = batch_df["total_stock"].iloc[-1] if not batch_df.empty else 0
             new_stock = prev_stock + total_units
 
             data = {
@@ -152,8 +151,22 @@ else:
             }
 
             insert_inventory(data)
-            st.success(f"📦 Entry for **{product_name}** saved.")
+            st.success(f"📦 Entry for **{product_name}** (Batch {batch_id}) saved.")
             st.experimental_rerun()
+
+    # 📦 Batch-Level Stock Summary
+    st.subheader("📦 Batch-Level Stock Summary (Current Available Stock)")
+    if not df.empty:
+        summary = (
+            df.groupby(['product_name', 'batch_id'])
+            .agg(
+                total_in=pd.NamedAgg(column='stock_in', aggfunc='sum'),
+                total_out=pd.NamedAgg(column='stock_out', aggfunc='sum')
+            )
+            .reset_index()
+        )
+        summary['current_stock'] = summary['total_in'] - summary['total_out']
+        st.dataframe(summary[['product_name', 'batch_id', 'current_stock']], use_container_width=True)
 
     st.subheader("📊 Inventory Log")
     st.dataframe(df, use_container_width=True)
@@ -184,74 +197,4 @@ else:
             st.experimental_rerun()
 
     st.download_button("⬇ Download CSV", df.to_csv(index=False).encode(), "inventory.csv", "text/csv")
-
-    st.subheader("📈 Inventory Over Time (Line Graph by Product)")
-    if not df.empty:
-        df['timestamp_in'] = pd.to_datetime(df['timestamp_in'], errors='coerce')
-
-        # Filter by product name
-        unique_products = df['product_name'].dropna().unique().tolist()
-        selected_products = st.multiselect("Select Products to Display", unique_products, default=unique_products)
-        df = df[df['product_name'].isin(selected_products)]
-
-        # Time range selector
-        time_range = st.selectbox("Select Time Range", ["All", "Last 30 Days", "Last 7 Days"])
-        if time_range == "Last 30 Days":
-            df = df[df['timestamp_in'] >= datetime.now() - timedelta(days=30)]
-        elif time_range == "Last 7 Days":
-            df = df[df['timestamp_in'] >= datetime.now() - timedelta(days=7)]
-
-        # Toggle rolling average
-        rolling_enabled = st.checkbox("Apply 3-day Rolling Average")
-
-        # Add grouping frequency option with auto-detection
-        suggested_freq = '15min' if df['timestamp_in'].nunique() > 10 else 'H'
-        group_options = ["15min", "Hour", "Day"]
-        default_index = group_options.index(suggested_freq) if suggested_freq in group_options else 0
-        group_freq = st.selectbox("Group Data By", group_options, index=default_index)
-        freq_code = {'15min': '15min', 'Hour': 'H', 'Day': 'D'}[group_freq]
-
-        grouped = df.groupby(['product_name', pd.Grouper(key='timestamp_in', freq=freq_code)])['total_stock'].max().reset_index()
-
-        if rolling_enabled:
-            grouped['total_stock'] = grouped.groupby('product_name')['total_stock'].transform(lambda x: x.rolling(3, min_periods=1).mean())
-
-        fig = px.line(
-            grouped,
-            x='timestamp_in',
-            y='total_stock',
-            color='product_name',
-            title="📉 Stock Level per Product Over Time",
-            labels={'timestamp_in': 'Date', 'total_stock': 'Total Stock'}
-        )
-        fig.update_traces(mode='lines+markers', hovertemplate='%{x|%Y-%m-%d}<br>%{y} units')
-        fig.update_layout(hovermode='x unified')
-        st.plotly_chart(fig, use_container_width=True)
-
-    st.subheader("📋 Inventory Summary Dashboard")
-    if not df.empty:
-        latest_stock = df.groupby('product_name')['total_stock'].last()
-        total_inventory_value = df['total_price'].sum()
-        most_stocked = latest_stock.idxmax() if not latest_stock.empty else "N/A"
-        least_stocked = latest_stock.idxmin() if not latest_stock.empty else "N/A"
-
-        col1, col2, col3 = st.columns(3)
-        col1.metric("🧮 Total Inventory Value", f"${total_inventory_value:,.2f}")
-        col2.metric("📈 Most Stocked Product", most_stocked)
-        col3.metric("📉 Least Stocked Product", least_stocked)
-
-        # Reorder alert: Show warning if any product is below 10% of its max stock
-        max_stock = df.groupby('product_name')['total_stock'].max()
-        latest_stock = df.groupby('product_name')['total_stock'].last()
-        low_stock_products = [p for p in latest_stock.index if latest_stock[p] <= 0.1 * max_stock.get(p, 0)]
-
-        if low_stock_products:
-            st.warning("🚨 Reorder Alert: The following products are below 10% of their maximum recorded stock:")
-            st.write(", ".join(low_stock_products))
-
-    st.subheader("🗃️ Full Inventory Table (From Database)")
-    conn = sqlite3.connect(DB_NAME)
-    full_df = pd.read_sql("SELECT * FROM inventory WHERE username = ?", conn, params=(st.session_state.username,))
-    st.dataframe(full_df, use_container_width=True)
-    conn.close()
 
