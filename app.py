@@ -162,7 +162,6 @@ show_expiration_alerts(df)
 create_tables()
 backfill_missing_product_ids()
     
-st.set_page_config(page_title="Inventory Tracker", layout="wide")
 st.title("📦 Inventory Management System - Lima Time")
 
 if 'logged_in' not in st.session_state:
