@@ -140,6 +140,8 @@ def show_expiration_alerts(df):
         st.info("ℹ️ No expiration data available.")
 
 
+
+
 # ---------- MAIN APP ----------
 create_tables()
 backfill_missing_product_ids()
@@ -307,6 +309,21 @@ else:
                 f"{selected_product}_{selected_batch}_stock_movement.csv",
                 "text/csv"
             )
+    # ---------- PDF & ALERT TEST PANEL ----------
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🧪 Test Utilities")
+    df = pd.read_sql("SELECT * FROM inventory", sqlite3.connect(DB_NAME))
+    if not df.empty:
+        selected_product = st.sidebar.selectbox("Select Product for PDF", df["product_name"].unique())
+        filtered_df = df[df["product_name"] == selected_product]
+        selected_batch = st.sidebar.selectbox("Select Batch", filtered_df["batch_id"].unique())
+        batch_df = filtered_df[filtered_df["batch_id"] == selected_batch]
+        if st.sidebar.button("📄 Generate PDF Invoice"):
+            path = generate_invoice_pdf(batch_df, selected_product, selected_batch, "TestUser")
+            with open(path, "rb") as f:
+                st.sidebar.download_button("⬇ Download Invoice PDF", data=f, file_name=os.path.basename(path), mime="application/pdf")
+
+    show_expiration_alerts(df)
 
     st.subheader("📊 Inventory Log")
     st.dataframe(df, use_container_width=True)
