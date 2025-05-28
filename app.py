@@ -1,4 +1,6 @@
 import streamlit as st
+# Set Streamlit page configuration at the very top
+st.set_page_config(page_title="Inventory Tracker", layout="wide")
 import pandas as pd
 import sqlite3
 import hashlib
@@ -160,9 +162,6 @@ create_tables()
 backfill_missing_product_ids()
     
 st.title("📦 Inventory Management System - Lima Time")
-# Set Streamlit page configuration at the very top
-st.set_page_config(page_title="Inventory Tracker", layout="wide")
-
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
