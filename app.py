@@ -95,6 +95,36 @@ def load_inventory(username):
     conn.close()
     return df
 
+def generate_invoice_pdf(df, product_name, batch_id, username):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.set_font("Arial", style='B', size=16)
+    pdf.cell(200, 10, txt="INVENTORY INVOICE", ln=True, align='C')
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt=f"User: {username} | Product: {product_name} | Batch: {batch_id}", ln=True, align='C')
+    pdf.cell(200, 10, txt=f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align='C')
+    pdf.ln(10)
+    pdf.set_font("Arial", style='B', size=10)
+    headers = ['Timestamp', 'Stock In', 'Stock Out', 'Total Units', 'Total Price']
+    for header in headers:
+        pdf.cell(38, 10, header, border=1)
+    pdf.ln()
+    pdf.set_font("Arial", size=10)
+    for _, row in df.iterrows():
+        timestamp = row.get("timestamp_in") or row.get("timestamp_out")
+        pdf.cell(38, 10, str(timestamp)[:19], border=1)
+        pdf.cell(38, 10, str(row["stock_in"]), border=1)
+        pdf.cell(38, 10, str(row["stock_out"]), border=1)
+        pdf.cell(38, 10, str(row["total_units"]), border=1)
+        pdf.cell(38, 10, f"${row['total_price']:.2f}", border=1)
+        pdf.ln()
+    temp_dir = tempfile.gettempdir()
+    file_path = os.path.join(temp_dir, f"invoice_{product_name}_{batch_id}.pdf")
+    pdf.output(file_path)
+    return file_path
+
+
 # ---------- MAIN APP ----------
 create_tables()
 backfill_missing_product_ids()
