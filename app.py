@@ -124,7 +124,6 @@ def generate_invoice_pdf(df, product_name, batch_id, username):
     pdf.output(file_path)
     return file_path
 
-
 def show_expiration_alerts(df):
     st.subheader("🔔 Expiration Alerts (Next 7 Days)")
     if "expiration_date" in df.columns and not df["expiration_date"].isna().all():
