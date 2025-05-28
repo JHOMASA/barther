@@ -11,6 +11,7 @@ import plotly.express as px
 from st_aggrid import AgGrid, GridOptionsBuilder
 import plotly.graph_objects as go
 import tempfile
+import os
 
 # ---------- CONFIGURATION ----------
 DB_NAME = "inventory.db"
