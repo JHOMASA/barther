@@ -125,6 +125,21 @@ def generate_invoice_pdf(df, product_name, batch_id, username):
     return file_path
 
 
+def show_expiration_alerts(df):
+    st.subheader("🔔 Expiration Alerts (Next 7 Days)")
+    if "expiration_date" in df.columns and not df["expiration_date"].isna().all():
+        df["expiration_date"] = pd.to_datetime(df["expiration_date"], errors="coerce")
+        today = pd.Timestamp(datetime.date.today())
+        soon_expiring = df[(df["expiration_date"].notna()) & (df["expiration_date"] <= today + pd.Timedelta(days=7))]
+        if not soon_expiring.empty:
+            st.warning("⚠️ The following items are expiring in the next 7 days:")
+            st.dataframe(soon_expiring[["product_name", "batch_id", "expiration_date", "total_stock"]], use_container_width=True)
+        else:
+            st.success("✅ No items expiring in the next 7 days.")
+    else:
+        st.info("ℹ️ No expiration data available.")
+
+
 # ---------- MAIN APP ----------
 create_tables()
 backfill_missing_product_ids()
