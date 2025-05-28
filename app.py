@@ -76,6 +76,30 @@ def load_inventory(username):
 
 # ---------- MAIN APP ----------
 create_tables()
+
+def backfill_missing_product_ids():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+
+    # Ensure product_id column exists
+    c.execute("PRAGMA table_info(inventory)")
+    columns = [col[1] for col in c.fetchall()]
+    if 'product_id' not in columns:
+        c.execute("ALTER TABLE inventory ADD COLUMN product_id TEXT")
+
+    df = pd.read_sql("SELECT * FROM inventory", conn)
+
+    # Fill missing or empty product_id values
+    missing_mask = df['product_id'].isna() | (df['product_id'].astype(str).str.strip() == '')
+    df.loc[missing_mask, 'product_id'] = df.loc[missing_mask].apply(
+        lambda row: f"AUTO_{row['product_name']}_{row['batch_id']}", axis=1
+    )
+
+    # Replace entire table with updated values
+    df.to_sql("inventory", conn, if_exists="replace", index=False)
+    conn.commit()
+    conn.close()
+    
 st.set_page_config(page_title="Inventory Tracker", layout="wide")
 st.title("📦 Inventory Management System - Lima Time")
 
