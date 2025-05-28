@@ -103,7 +103,7 @@ def generate_invoice_pdf(df, product_name, batch_id, username):
     pdf.cell(200, 10, txt="INVENTORY INVOICE", ln=True, align='C')
     pdf.set_font("Arial", size=12)
     pdf.cell(200, 10, txt=f"User: {username} | Product: {product_name} | Batch: {batch_id}", ln=True, align='C')
-    pdf.cell(200, 10, txt=f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align='C')
+    pdf.cell(200, 10, txt=f"Generated: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align='C')
     pdf.ln(10)
     pdf.set_font("Arial", style='B', size=10)
     headers = ['Timestamp', 'Stock In', 'Stock Out', 'Total Units', 'Total Price']
@@ -123,12 +123,12 @@ def generate_invoice_pdf(df, product_name, batch_id, username):
     file_path = os.path.join(temp_dir, f"invoice_{product_name}_{batch_id}.pdf")
     pdf.output(file_path)
     return file_path
-
+    
 def show_expiration_alerts(df):
     st.subheader("🔔 Expiration Alerts (Next 7 Days)")
     if "expiration_date" in df.columns and not df["expiration_date"].isna().all():
         df["expiration_date"] = pd.to_datetime(df["expiration_date"], errors="coerce")
-        today = pd.Timestamp(datetime.date.today())
+        today = pd.Timestamp(dt.now().date())
         soon_expiring = df[(df["expiration_date"].notna()) & (df["expiration_date"] <= today + pd.Timedelta(days=7))]
         if not soon_expiring.empty:
             st.warning("⚠️ The following items are expiring in the next 7 days:")
@@ -137,7 +137,6 @@ def show_expiration_alerts(df):
             st.success("✅ No items expiring in the next 7 days.")
     else:
         st.info("ℹ️ No expiration data available.")
-
 
 # ---------- PDF & ALERT TEST PANEL ----------
 st.sidebar.markdown("---")
