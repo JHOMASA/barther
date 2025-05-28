@@ -8,6 +8,8 @@ import plotly.express as px
 from st_aggrid import AgGrid, GridOptionsBuilder
 import plotly.graph_objects as go
 import tempfile
+# Set Streamlit page configuration at the very top
+st.set_page_config(page_title="Inventory Tracker", layout="wide")
 
 # ---------- CONFIGURATION ----------
 DB_NAME = "inventory.db"
