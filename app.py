@@ -143,6 +143,24 @@ def show_expiration_alerts(df):
     else:
         st.info("ℹ️ No expiration data available.")
 
+# ---------- STOCK ALERTS ----------
+def show_low_stock_alerts(df):
+    st.subheader("🚨 Low Stock Alerts (Below 10%)")
+    if not df.empty and 'total_stock' in df.columns:
+        grouped = df.groupby(['product_name', 'batch_id']).agg(
+            latest_stock=('total_stock', 'last'),
+            max_stock=('total_stock', 'max')
+        ).reset_index()
+        grouped['stock_percentage'] = (grouped['latest_stock'] / grouped['max_stock']) * 100
+        low_stock = grouped[grouped['stock_percentage'] < 10]
+        if not low_stock.empty:
+            st.warning("⚠️ The following items are below 10% of max stock:")
+            st.dataframe(low_stock[['product_name', 'batch_id', 'latest_stock', 'max_stock', 'stock_percentage']], use_container_width=True)
+        else:
+            st.success("✅ All items have sufficient stock.")
+    else:
+        st.info("ℹ️ No stock data available to evaluate low stock alerts.")
+
 # ---------- PDF & ALERT TEST PANEL ----------
 st.sidebar.markdown("---")
 st.sidebar.subheader("🧪 Test Utilities")
@@ -158,6 +176,7 @@ if not df.empty:
             st.sidebar.download_button("⬇ Download Invoice PDF", data=f, file_name=os.path.basename(path), mime="application/pdf")
 
 show_expiration_alerts(df)
+show_low_stock_alerts(df)
 
 # ---------- MAIN APP ----------
 create_tables()
